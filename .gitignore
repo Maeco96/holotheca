@@ -32,3 +32,4 @@ tools/ppocr/node_modules/
 
 # Scan logs exported from the phone (photos of the owner's cards)
 scrinium-letture-*.json
+holotheca-letture-*.json
