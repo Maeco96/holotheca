@@ -18,36 +18,75 @@
       margin: 0; min-height: 100vh; min-height: 100dvh;
       background: #181c2c; color: #f0f0f0;
       font: 16px/1.4 -apple-system, system-ui, sans-serif;
-      padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
       display: flex; flex-direction: column; gap: 12px;
     }
     h1 { margin: 0; font-size: 18px; }
-    .stage { position: relative; flex: 1; min-height: 240px; background: #000; border-radius: 12px; overflow: hidden; }
+    h2 { margin: 8px 0 0; font-size: 15px; color: #9aa3bd; font-weight: 600; }
+    .stage { position: relative; height: 60vh; height: 60dvh; background: #000; border-radius: 12px; overflow: hidden; }
     video { width: 100%; height: 100%; object-fit: cover; display: block; }
-    .frame { position: absolute; inset: 8% 18%; border: 2px dashed rgba(255,255,255,.7); border-radius: 10px; pointer-events: none; }
-    button { font: inherit; padding: 12px 16px; border: 0; border-radius: 10px; background: #5a8cff; color: #fff; }
+    /* Card-shaped guide: 63 x 88 mm. The OCR crops are taken relative to this rectangle. */
+    .frame {
+      position: absolute; top: 50%; left: 50%; height: 90%; aspect-ratio: 63 / 88;
+      transform: translate(-50%, -50%);
+      border: 2px dashed rgba(255,255,255,.75); border-radius: 10px; pointer-events: none;
+    }
+    .row { display: flex; gap: 8px; }
+    button { flex: 1; font: inherit; padding: 12px 16px; border: 0; border-radius: 10px; background: #5a8cff; color: #fff; }
     button[disabled] { opacity: .5; }
     dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; }
-    dt { color: #9aa3bd; } dd { margin: 0; }
-    .note { font-size: 13px; color: #9aa3bd; }
+    dt { color: #9aa3bd; } dd { margin: 0; word-break: break-word; }
+    .note { font-size: 13px; color: #9aa3bd; margin: 0; }
     .err { color: #ff8d8d; }
+    .strip { background: #101424; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .strip canvas { width: 100%; height: auto; border-radius: 6px; background: #000; }
+    .strip .out { font: 14px/1.35 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
+    .strip .meta { font-size: 12px; color: #9aa3bd; }
+    .ok { color: #7be39a; }
   </style>
 </head>
 <body>
   <h1>Scrinium <span id="version"></span></h1>
+
   <div class="stage">
     <video id="video" playsinline muted autoplay></video>
-    <div class="frame"></div>
+    <div class="frame" id="frame"></div>
   </div>
-  <button id="start">Start camera</button>
+
+  <div class="row">
+    <button id="start">Start camera</button>
+    <button id="read" disabled>Capture &amp; read</button>
+  </div>
+  <p class="note">Put the bare card (no sleeve) inside the dashed frame on a dark matte surface, flat, with diffuse light and no glare. Then tap Capture &amp; read.</p>
+
+  <h2>OCR result</h2>
+  <p class="note" id="ocrStatus">Not started. The first read loads about 7 MB of OCR files.</p>
+  <div class="strip">
+    <canvas id="cardCanvas" width="10" height="10"></canvas>
+    <div class="meta" id="cardMeta"></div>
+  </div>
+  <div class="strip">
+    <canvas id="nameCanvas" width="10" height="10"></canvas>
+    <div class="out" id="nameOut">name: –</div>
+    <div class="meta" id="nameMeta"></div>
+  </div>
+  <div class="strip">
+    <canvas id="numberCanvas" width="10" height="10"></canvas>
+    <div class="out" id="numberOut">number line: –</div>
+    <div class="meta" id="numberMeta"></div>
+  </div>
+
+  <h2>Device</h2>
   <dl>
     <dt>Installed as app</dt><dd id="standalone">?</dd>
     <dt>Offline ready</dt><dd id="offline">checking…</dd>
     <dt>Camera</dt><dd id="camera">not started</dd>
     <dt>Stored data</dt><dd id="storage">checking…</dd>
   </dl>
-  <p class="note">Phase 0 test page: camera, install and offline check only. Nothing is saved.</p>
+  <p class="note">Phase 0 test page. Nothing is saved or sent anywhere: the photo stays on the phone.</p>
   <p id="error" class="err" hidden></p>
-  <script src="app.js"></script>
+
+  <script src="vendor/tesseract/tesseract.min.js" defer></script>
+  <script src="app.js" defer></script>
 </body>
 </html>
