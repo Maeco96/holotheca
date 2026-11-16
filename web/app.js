@@ -1,6 +1,6 @@
 // Phase 0 test page for the PWA route: camera, install, offline and an OCR read test.
 // Nothing is stored or uploaded; the captured frame stays in memory on the device.
-const VERSION = "0.5.0";
+const VERSION = "0.6.0";
 const $ = (id) => document.getElementById(id);
 
 // Card size in mm; the guide frame uses the same ratio.
@@ -65,25 +65,95 @@ if ("serviceWorker" in navigator) {
 
 let stream = null;
 
-async function startCamera() {
+let track = null;
+let torchOn = false;
+
+async function applyAdvanced(constraint) {
+  try {
+    await track.applyConstraints({ advanced: [constraint] });
+    return true;
+  } catch (e) {
+    showError(`${Object.keys(constraint)[0]}: ${e.name} ${e.message}`);
+    return false;
+  }
+}
+
+/** Shows only the controls this browser actually exposes for the running camera track. */
+function setupControls() {
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  const s = track.getSettings();
+  $("controls").hidden = false;
+
+  if (caps.zoom && typeof caps.zoom.max === "number") {
+    const z = $("zoom");
+    z.min = caps.zoom.min; z.max = caps.zoom.max; z.step = caps.zoom.step || 0.1;
+    z.value = s.zoom || caps.zoom.min;
+    $("zoomVal").textContent = Number(z.value).toFixed(1) + "x";
+    $("zoomRow").hidden = false;
+    z.oninput = async () => {
+      $("zoomVal").textContent = Number(z.value).toFixed(1) + "x";
+      await applyAdvanced({ zoom: Number(z.value) });
+    };
+  } else {
+    $("zoomRow").hidden = true;
+  }
+
+  if (caps.focusMode && caps.focusMode.length) {
+    const f = $("focus");
+    f.innerHTML = "";
+    for (const mode of caps.focusMode) f.add(new Option(mode, mode));
+    f.value = s.focusMode || caps.focusMode[0];
+    f.onchange = () => applyAdvanced({ focusMode: f.value });
+    $("focusRow").hidden = false;
+  } else {
+    $("focusRow").hidden = true;
+  }
+
+  if ("torch" in caps) {
+    torchOn = false;
+    $("torch").textContent = "Torch (flash light): off";
+    $("torch").hidden = false;
+    $("torch").onclick = async () => {
+      if (await applyAdvanced({ torch: !torchOn })) {
+        torchOn = !torchOn;
+        $("torch").textContent = `Torch (flash light): ${torchOn ? "on" : "off"}`;
+      }
+    };
+  } else {
+    $("torch").hidden = true;
+  }
+
+  const exposed = Object.keys(caps).sort().join(", ") || "none";
+  $("camera").textContent =
+    `${s.width}x${s.height}, ${track.label || "camera"}; exposed controls: ${exposed}`;
+}
+
+async function fillLensList(currentId) {
+  const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+  const lens = $("lens");
+  lens.innerHTML = "";
+  for (const d of devices) lens.add(new Option(d.label || "camera", d.deviceId));
+  if (currentId) lens.value = currentId;
+  lens.onchange = () => startCamera(lens.value);
+}
+
+async function startCamera(deviceId) {
   $("start").disabled = true;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: {
-        facingMode: { ideal: "environment" },
-        width: { ideal: 3840 },
-        height: { ideal: 2160 },
-      },
-    });
-    const video = $("video");
-    video.srcObject = stream;
-    await video.play();
-    const track = stream.getVideoTracks()[0];
-    const s = track.getSettings();
-    const caps = track.getCapabilities ? track.getCapabilities() : {};
-    const focus = caps.focusMode ? caps.focusMode.join(",") : "not exposed";
-    $("camera").textContent = `${s.width}x${s.height}, focus modes: ${focus}`;
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    const video = {
+      width: { ideal: 3840 },
+      height: { ideal: 2160 },
+      ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" } }),
+    };
+    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+    const el = $("video");
+    el.srcObject = stream;
+    await el.play();
+    track = stream.getVideoTracks()[0];
+    // Labels and the full lens list only appear once the camera permission is granted.
+    await fillLensList(track.getSettings().deviceId);
+    setupControls();
     $("start").textContent = "Camera running";
     $("read").disabled = false;
   } catch (e) {
@@ -340,7 +410,7 @@ async function captureAndRead() {
   }
 }
 
-$("start").addEventListener("click", startCamera);
+$("start").addEventListener("click", () => startCamera());
 $("read").addEventListener("click", captureAndRead);
 
 // Hook used by automated checks.
