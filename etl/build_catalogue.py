@@ -76,7 +76,7 @@ def earliest_date(value) -> str | None:
 class Builder:
     def __init__(self, db: sqlite3.Connection):
         self.db = db
-        self.stats = {"series": 0, "sets": 0, "cards": 0, "names": 0, "variants": 0, "external_ids": 0}
+        self.stats = {"series": 0, "sets": 0, "cards": 0, "names": 0, "variants": 0, "external_ids": 0, "variants_inferred": 0}
         self.warnings: list[str] = []
         self.languages_seen: set[str] = set()
         self.set_data: dict[Path, dict] = {}   # parsed set files
@@ -242,6 +242,7 @@ class Builder:
 
         self.add_external(card_id, None, data.get("thirdParty"))
         self.build_variants(card_id, data.get("variants"))
+        self.infer_variants(card_id, data.get("rarity"))
 
     def build_variants(self, card_id: int, variants) -> None:
         entries: list[dict] = []
@@ -260,6 +261,27 @@ class Builder:
             )
             self.stats["variants"] += 1
             self.add_external(card_id, cursor.lastrowid, entry.get("thirdParty"))
+
+    def infer_variants(self, card_id: int, rarity) -> None:
+        """Guess one print variant from the rarity when TCGdex lists none.
+
+        Deliberately conservative: plain Common/Uncommon/Rare become `normal`, any "Holo"
+        rarity becomes `holo`. Reverse holos, 1st editions and stamps are never guessed.
+        Rows are flagged inferred = 1 so the app can show them as a guess.
+        """
+        if self.db.execute("SELECT 1 FROM variants WHERE card_id = ?", (card_id,)).fetchone():
+            return
+        text = (rarity or "").strip().lower()
+        if "holo" in text:
+            kind = "holo"
+        elif text in ("common", "uncommon", "rare"):
+            kind = "normal"
+        else:
+            return
+        self.db.execute(
+            "INSERT INTO variants (card_id, type, size, inferred) VALUES (?, ?, 'standard', 1)", (card_id, kind)
+        )
+        self.stats["variants_inferred"] += 1
 
     # ----- manual corrections -----
 

@@ -71,6 +71,12 @@ class BuildTests(unittest.TestCase):
             thirdParty: { cardmarket: 999 } }""")
         write(self.src, "data/Base/Base Set/5a.ts", """const card: Card = {
             name: { en: "Pidgey" }, category: "Pokemon", set: Set, variants: { normal: true, firstEdition: true } }""")
+        write(self.src, "data/Base/Base Set/6.ts", """const card: Card = {
+            name: { en: "Rattata" }, rarity: "Common", category: "Pokemon", set: Set }""")
+        write(self.src, "data/Base/Base Set/7.ts", """const card: Card = {
+            name: { en: "Mew" }, rarity: "Holo Rare", category: "Pokemon", set: Set }""")
+        write(self.src, "data/Base/Base Set/8.ts", """const card: Card = {
+            name: { en: "Ditto" }, rarity: "Ultra Rare", category: "Pokemon", set: Set }""")
         # Asian family reuses the id base1 for a different set, and one series has the placeholder id 'null'.
         write(self.src, "data-asia/Base.ts", "const serie: Serie = { id: 'null', name: {} }")
         write(self.src, "data-asia/Base/base1.ts", """const set: Set = {
@@ -84,7 +90,7 @@ class BuildTests(unittest.TestCase):
         self.addCleanup(self.db.close)
 
     def test_counts_and_unique_set_ids(self):
-        self.assertEqual((self.result["sets"], self.result["cards"]), (2, 3))
+        self.assertEqual((self.result["sets"], self.result["cards"]), (2, 6))
         ids = dict(self.db.execute("SELECT id, source_id FROM sets"))
         self.assertEqual(ids, {"base1": "base1", "base1~asia": "base1"})
 
@@ -111,6 +117,18 @@ class BuildTests(unittest.TestCase):
             "(SELECT id FROM cards WHERE source_id = 'base1-4') ORDER BY external_id"
         ).fetchall()
         self.assertEqual(ids, [("cardmarket", "111", 0), ("cardmarket", "999", 1)])
+
+    def test_variants_inferred_only_when_unambiguous(self):
+        def inferred(source_id):
+            return self.db.execute(
+                "SELECT type, inferred FROM variants WHERE card_id = (SELECT id FROM cards WHERE source_id = ?)",
+                (source_id,),
+            ).fetchall()
+
+        self.assertEqual(inferred("base1-6"), [("normal", 1)])
+        self.assertEqual(inferred("base1-7"), [("holo", 1)])
+        self.assertEqual(inferred("base1-8"), [])
+        self.assertEqual(inferred("base1-4")[0][1], 0)
 
     def test_search_and_foreign_keys(self):
         hit = self.db.execute("SELECT card_id FROM card_search WHERE card_search MATCH 'dracaufeu*'").fetchall()
