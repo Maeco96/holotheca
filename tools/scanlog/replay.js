@@ -8,7 +8,7 @@
 //   node tools/scanlog/replay.js LOG.json INDEX.json [--labels LABELS.json] [--photos DIR]
 //                                [--json OUT.json] [--verbose]
 //
-//   LOG.json     the exported file (holotheca-letture-YYYY-MM-DD.json; older logs: scrinium-letture-...)
+//   LOG.json     the exported file (holotheca-letture-YYYY-MM-DD.json; the "kind" field stays "scrinium-scan-log")
 //   INDEX.json   web/data/scan-index.json, built by etl/export_scan_index.py
 //   --labels     {"<reading id>": "<card key>" | "skip"}: the right card for readings where the
 //                owner picked none, or a correction of a wrong pick; "skip" drops a reading
@@ -77,7 +77,7 @@ function diagnose(result, truthEvidence) {
 function main() {
   const args = parseArgs(process.argv.slice(2));
   const log = JSON.parse(fs.readFileSync(args.positional[0], "utf8"));
-  if (log.kind !== "scrinium-scan-log") throw new Error("not a Holotheca scan log");
+  if (log.kind !== "scrinium-scan-log") throw new Error("not a scrinium scan log");
   const raw = JSON.parse(fs.readFileSync(args.positional[1], "utf8"));
   const index = R.prepareIndex(raw);
   const keys = new Set(raw.cards.map((_, i) => keyOf(raw, i)));
