@@ -22,6 +22,7 @@ One row per decision. Newest last.
 | 2026-11-16 | PWA test on iPhone (iOS 27.2.1) passed: installs from the Home Screen, starts offline, camera 2160x3840; Safari does not expose focus control; web storage is not guaranteed persistent, so backups are mandatory | Real-device test |
 | 2026-11-16 | Route: PWA first with an OCR read test; the native app (SideInstaller + SideStore) only if browser OCR proves too weak | Owner's choice. No PC software needed; keeps zero cost |
 | 2026-11-16 | OCR test v0.3.0: wider strips, several number strips (bottom-left, bottom-right, full bottom), grayscale then black/white retry, coloured boxes drawn on the captured photo | First real read (sleeved Eevee, e-Reader era) returned nothing useful; the boxes show whether the crop or the image quality is at fault |
+| 2026-11-16 | OCR test v0.4.0: the number is searched in thin overlapping bands (left and right halves, step 1.5% of card height) instead of one tall strip; name strip covers the full width and HP is parsed from it | Real read of a sleeved e-Reader Eevee: name read correctly, number not, because bars and the illustrator line share the strip. Layouts differ by era, so the app must not assume a fixed position; the final lookup will rank candidates using name + HP + number against the catalogue |
 
 ## Open
 

@@ -1,6 +1,6 @@
 // Phase 0 test page for the PWA route: camera, install, offline and an OCR read test.
 // Nothing is stored or uploaded; the captured frame stays in memory on the device.
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 const $ = (id) => document.getElementById(id);
 
 // Card size in mm; the guide frame uses the same ratio.
@@ -10,14 +10,20 @@ const CARD_RATIO = 63 / 88;
 // Names sit top-left; the collector number and set code sit on the bottom strip.
 const NUMBER_WHITELIST = "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ-";
 const REGIONS = {
-  name: { x: 0.0, y: 0.0, w: 0.80, h: 0.14, psm: "7", whitelist: "" },
-  // The number sits bottom-left on modern cards and above the bottom edge on older ones,
-  // so several strips are tried and the first one that yields NNN/NNN wins.
-  numberLeft: { x: 0.0, y: 0.86, w: 0.55, h: 0.14, psm: "7", whitelist: NUMBER_WHITELIST },
-  numberRight: { x: 0.45, y: 0.86, w: 0.55, h: 0.14, psm: "7", whitelist: NUMBER_WHITELIST },
-  numberFull: { x: 0.0, y: 0.80, w: 1.0, h: 0.20, psm: "11", whitelist: NUMBER_WHITELIST },
+  // Name and HP share the top strip on every era; it is cut at the full card width.
+  name: { x: 0.0, y: 0.0, w: 1.0, h: 0.14, psm: "7", whitelist: "" },
 };
-const NUMBER_REGIONS = ["numberLeft", "numberRight", "numberFull"];
+// The number sits bottom-left on modern cards and bottom-right on older ones, on a thin line
+// between other text. Thin overlapping strips (left and right halves) are read one by one and
+// the first NNN/NNN wins.
+const NUMBER_REGIONS = [];
+for (let y = 0.84; y < 0.96; y += 0.015) {
+  for (const x of [0.0, 0.45]) {
+    const key = `n${y.toFixed(3)}_${x}`;
+    REGIONS[key] = { x, y, w: 0.55, h: 0.045, psm: "7", whitelist: NUMBER_WHITELIST };
+    NUMBER_REGIONS.push(key);
+  }
+}
 
 $("version").textContent = VERSION;
 $("standalone").textContent =
@@ -234,10 +240,12 @@ function outlineRegions() {
   const canvas = $("cardCanvas");
   const ctx = canvas.getContext("2d");
   ctx.lineWidth = Math.max(4, canvas.width / 250);
-  const colors = { name: "#00e0ff", numberLeft: "#ff4dd2", numberRight: "#ffd400", numberFull: "#7dff7d" };
-  for (const [key, c] of Object.entries(colors)) {
-    const r = REGIONS[key];
-    ctx.strokeStyle = c;
+  const boxes = [
+    ["#00e0ff", REGIONS.name],
+    ["#7dff7d", { x: 0, y: 0.84, w: 1, h: 0.16 }],
+  ];
+  for (const [color, r] of boxes) {
+    ctx.strokeStyle = color;
     ctx.strokeRect(r.x * canvas.width, r.y * canvas.height, r.w * canvas.width, r.h * canvas.height);
   }
 }
@@ -259,7 +267,10 @@ async function captureAndRead() {
     const nameTries = [await readCanvas(nameCrop, "name", false), await readCanvas(nameCrop, "name", true)];
     const name = nameTries.reduce((best, t) => (t.confidence > best.confidence ? t : best));
     draw("nameCanvas", name.prepared);
-    $("nameOut").textContent = `name: ${name.text || "(nothing read)"}`;
+    const hp = (name.text.match(/HP\s*(\d{2,3})/i) || name.text.match(/(\d{2,3})\s*HP/i) || [])[1];
+    const nameOnly = name.text.replace(/\s*(HP\s*)?\d{2,3}.*$/i, "").replace(/[^\p{L}\p{N}' .:-]+$/u, "").trim();
+    $("nameOut").textContent = `name: ${nameOnly || name.text || "(nothing read)"}${hp ? `\nHP: ${hp}` : ""}`;
+    $("nameOut").style.whiteSpace = "pre-wrap";
     $("nameMeta").textContent =
       `confidence ${name.confidence}% · ${nameTries.map((t) => t.ms).join("+")} ms`;
 
@@ -270,13 +281,13 @@ async function captureAndRead() {
       const crop = cropRegion(card, REGIONS[regionName]);
       for (const binarize of [false, true]) {
         const r = await readCanvas(crop, regionName, binarize);
-        attempts.push(`${regionName}${binarize ? " bw" : ""}: ${r.text || "-"} (${r.confidence}%)`);
+        attempts.push(`${regionName.slice(1)}${binarize ? " bw" : ""}: ${r.text || "-"}`);
         if (r.number && !found) found = { ...r, regionName };
         if (found) break;
       }
       if (found) break;
     }
-    const shown = found || { prepared: preprocess(cropRegion(card, REGIONS.numberLeft)), confidence: 0, ms: 0 };
+    const shown = found || { prepared: preprocess(cropRegion(card, REGIONS[NUMBER_REGIONS[0]])), confidence: 0, ms: 0 };
     draw("numberCanvas", shown.prepared);
     $("numberOut").innerHTML = "";
     const line = document.createElement("div");
@@ -303,4 +314,4 @@ $("start").addEventListener("click", startCamera);
 $("read").addEventListener("click", captureAndRead);
 
 // Hook used by automated checks.
-window.scriniumTest = { readCanvas, preprocess, REGIONS, CARD_RATIO };
+window.scriniumTest = { readCanvas, preprocess, REGIONS, NUMBER_REGIONS, CARD_RATIO };
