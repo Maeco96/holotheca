@@ -25,7 +25,7 @@ SideStore cambia spesso: se un passo non corrisponde, vale la loro documentazion
 
 ## Installare Holotheca
 
-1. Dall'iPhone apri la pagina [Releases](https://github.com/Maeco96/scrinium/releases) e scarica `Holotheca.ipa` dell'ultima build.
+1. Dall'iPhone apri la pagina [Releases](https://github.com/Maeco96/holotheca/releases) e scarica `Holotheca.ipa` dell'ultima build.
 2. Attiva LocalDevVPN.
 3. In SideStore, scheda **My Apps**, tocca **+** e scegli il file `Holotheca.ipa` da File.
 4. Apri Holotheca e consenti l'accesso alla fotocamera.
