@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure how often the fields Scrinium needs are filled in tcgdex/cards-database.
+"""Measure how often the fields Holotheca needs are filled in tcgdex/cards-database.
 
 Usage:
     python3 etl/tcgdex_fields.py /path/to/cards-database [--out docs/coverage/tcgdex-fields.md]

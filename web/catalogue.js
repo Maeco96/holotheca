@@ -6,7 +6,7 @@ const Catalogue = (() => {
   const CATEGORY = { P: "Pokémon", T: "Allenatore", E: "Energia" };
   const IMAGE_LANG_ORDER = ["it", "en", "fr", "de", "es", "pt", "ja", "zh-tw", "ko", "th", "id", "zh-cn"];
   let promise = null;
-  let index = null; // prepared index, see ScriniumRecognize.prepareIndex
+  let index = null; // prepared index, see HolothecaRecognize.prepareIndex
   let byKey = null;
 
   function absolute(path) {
@@ -22,7 +22,7 @@ const Catalogue = (() => {
           return response.json();
         })
         .then((raw) => {
-          index = ScriniumRecognize.prepareIndex(raw);
+          index = HolothecaRecognize.prepareIndex(raw);
           byKey = new Map();
           raw.cards.forEach((card, i) => byKey.set(`${raw.sets[card[0]][0]}-${card[1]}`, i));
           return index;
@@ -122,8 +122,8 @@ const Catalogue = (() => {
     if (!index) return [];
     const raw = index.raw;
     const numberMatch = text.match(/(\d{1,3})\s*(?:\/\s*(\d{1,3}))?\s*$/);
-    const words = ScriniumRecognize.normalize(text.replace(/\d+\s*(\/\s*\d+)?\s*$/, ""));
-    const wantedNumber = numberMatch ? ScriniumRecognize.normalizeNumber(numberMatch[1]) : null;
+    const words = HolothecaRecognize.normalize(text.replace(/\d+\s*(\/\s*\d+)?\s*$/, ""));
+    const wantedNumber = numberMatch ? HolothecaRecognize.normalizeNumber(numberMatch[1]) : null;
     const wantedTotal = numberMatch && numberMatch[2] ? Number(numberMatch[2]) : null;
     if (words.length < 2 && !wantedNumber) return [];
 
@@ -139,7 +139,7 @@ const Catalogue = (() => {
     }
     const found = pool.filter((i) => {
       const row = raw.cards[i];
-      if (wantedNumber && ScriniumRecognize.normalizeNumber(row[1]) !== wantedNumber) return false;
+      if (wantedNumber && HolothecaRecognize.normalizeNumber(row[1]) !== wantedNumber) return false;
       if (wantedTotal && raw.sets[row[0]][2] !== wantedTotal) return false;
       return true;
     });

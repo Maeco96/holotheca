@@ -2,8 +2,8 @@
 // CACHE is rewritten at deploy time; VENDOR_CACHE is stable so the ~40 MB of OCR files
 // are downloaded once and kept across deployments. The card index (data/) follows CACHE,
 // so a new deployment brings a fresh catalogue.
-const CACHE = "scrinium-dev";
-const VENDOR_CACHE = "scrinium-vendor-2";
+const CACHE = "holotheca-dev";
+const VENDOR_CACHE = "holotheca-vendor-2";
 const SHELL = [
   "./", "index.html", "styles.css", "app.js", "recognize.js", "catalogue.js", "store.js", "camera.js", "scanlog.js",
   "manifest.webmanifest",

@@ -2,4 +2,4 @@
 import Ocr from "@gutenye/ocr-browser";
 import * as ort from "onnxruntime-web";
 
-window.ScriniumOcr = { Ocr, ort };
+window.HolothecaOcr = { Ocr, ort };

@@ -1,4 +1,4 @@
-name: Scrinium
+name: Holotheca
 options:
   bundleIdPrefix: com.maeco96
   deploymentTarget:
@@ -10,18 +10,18 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
-  Scrinium:
+  Holotheca:
     type: application
     platform: iOS
     sources:
-      - Scrinium
+      - Holotheca
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.maeco96.scrinium
+        PRODUCT_BUNDLE_IDENTIFIER: com.maeco96.holotheca
         TARGETED_DEVICE_FAMILY: "1"
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Scrinium
-        INFOPLIST_KEY_NSCameraUsageDescription: "Scrinium uses the camera to scan trading cards."
+        INFOPLIST_KEY_CFBundleDisplayName: Holotheca
+        INFOPLIST_KEY_NSCameraUsageDescription: "Holotheca uses the camera to scan trading cards."
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait

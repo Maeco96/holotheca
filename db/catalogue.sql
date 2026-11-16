@@ -1,4 +1,4 @@
--- Scrinium catalogue schema (read-only file, rebuilt by the ETL and replaced on update).
+-- Holotheca catalogue schema (read-only file, rebuilt by the ETL and replaced on update).
 -- Personal data lives in a separate file: see collection.sql.
 --
 -- Key idea: a card is one printed card of one set (set + collector number).
