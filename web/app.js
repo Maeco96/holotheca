@@ -1,6 +1,6 @@
 // Phase 0 test page for the PWA route: camera, install, offline and an OCR read test.
 // Nothing is stored or uploaded; the captured frame stays in memory on the device.
-const VERSION = "0.2.0";
+const VERSION = "0.3.0";
 const $ = (id) => document.getElementById(id);
 
 // Card size in mm; the guide frame uses the same ratio.
@@ -8,13 +8,16 @@ const CARD_RATIO = 63 / 88;
 
 // Where to look on the card, as fractions of the card rectangle inside the guide frame.
 // Names sit top-left; the collector number and set code sit on the bottom strip.
+const NUMBER_WHITELIST = "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ-";
 const REGIONS = {
-  name: { x: 0.04, y: 0.02, w: 0.70, h: 0.10, psm: "7", whitelist: "" },
-  number: {
-    x: 0.03, y: 0.90, w: 0.94, h: 0.09, psm: "11",
-    whitelist: "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ-",
-  },
+  name: { x: 0.0, y: 0.0, w: 0.80, h: 0.14, psm: "7", whitelist: "" },
+  // The number sits bottom-left on modern cards and above the bottom edge on older ones,
+  // so several strips are tried and the first one that yields NNN/NNN wins.
+  numberLeft: { x: 0.0, y: 0.86, w: 0.55, h: 0.14, psm: "7", whitelist: NUMBER_WHITELIST },
+  numberRight: { x: 0.45, y: 0.86, w: 0.55, h: 0.14, psm: "7", whitelist: NUMBER_WHITELIST },
+  numberFull: { x: 0.0, y: 0.80, w: 1.0, h: 0.20, psm: "11", whitelist: NUMBER_WHITELIST },
 };
+const NUMBER_REGIONS = ["numberLeft", "numberRight", "numberFull"];
 
 $("version").textContent = VERSION;
 $("standalone").textContent =
@@ -125,7 +128,7 @@ function cropRegion(card, region) {
 }
 
 /** Grayscale, upscale small strips and stretch contrast between the 2nd and 98th percentile. */
-function preprocess(source, minHeight = 120) {
+function preprocess(source, minHeight = 120, binarize = false) {
   const scale = Math.max(1, minHeight / source.height);
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(source.width * scale);
@@ -158,7 +161,8 @@ function preprocess(source, minHeight = 120) {
   const span = Math.max(1, high - low);
   for (let i = 0; i < d.length; i += 4) {
     const gray = Math.max(0, Math.min(255, (((d[i] - low) * 255) / span) | 0));
-    d[i] = d[i + 1] = d[i + 2] = gray;
+    const out = binarize ? (gray > 127 ? 255 : 0) : gray;
+    d[i] = d[i + 1] = d[i + 2] = out;
     d[i + 3] = 255;
   }
   ctx.putImageData(image, 0, 0);
@@ -196,14 +200,14 @@ function getWorker() {
 }
 
 /** Reads one region. Returns the raw text, confidence, time and the parsed number if any. */
-async function readCanvas(canvas, regionName) {
+async function readCanvas(canvas, regionName, binarize = false) {
   const region = REGIONS[regionName];
   const worker = await getWorker();
   await worker.setParameters({
     tessedit_pageseg_mode: region.psm,
     tessedit_char_whitelist: region.whitelist,
   });
-  const prepared = preprocess(canvas);
+  const prepared = preprocess(canvas, 120, binarize);
   const t0 = performance.now();
   const { data } = await worker.recognize(prepared);
   const ms = Math.round(performance.now() - t0);
@@ -225,6 +229,19 @@ function draw(canvasId, source) {
   target.getContext("2d").drawImage(source, 0, 0);
 }
 
+/** Draws the OCR strips on the captured card so a wrong crop is visible at once. */
+function outlineRegions() {
+  const canvas = $("cardCanvas");
+  const ctx = canvas.getContext("2d");
+  ctx.lineWidth = Math.max(4, canvas.width / 250);
+  const colors = { name: "#00e0ff", numberLeft: "#ff4dd2", numberRight: "#ffd400", numberFull: "#7dff7d" };
+  for (const [key, c] of Object.entries(colors)) {
+    const r = REGIONS[key];
+    ctx.strokeStyle = c;
+    ctx.strokeRect(r.x * canvas.width, r.y * canvas.height, r.w * canvas.width, r.h * canvas.height);
+  }
+}
+
 async function captureAndRead() {
   $("read").disabled = true;
   $("error").hidden = true;
@@ -235,27 +252,44 @@ async function captureAndRead() {
       `Card area captured: ${card.width}x${card.height} px (about ${(card.width / 63).toFixed(1)} px/mm across the card)`;
 
     $("ocrStatus").textContent = "Reading…";
-    const nameCrop = cropRegion(card, REGIONS.name);
-    const numberCrop = cropRegion(card, REGIONS.number);
+    outlineRegions();
 
-    const name = await readCanvas(nameCrop, "name");
+    // Name: grayscale and black/white attempts, keep the more confident one.
+    const nameCrop = cropRegion(card, REGIONS.name);
+    const nameTries = [await readCanvas(nameCrop, "name", false), await readCanvas(nameCrop, "name", true)];
+    const name = nameTries.reduce((best, t) => (t.confidence > best.confidence ? t : best));
     draw("nameCanvas", name.prepared);
     $("nameOut").textContent = `name: ${name.text || "(nothing read)"}`;
-    $("nameMeta").textContent = `confidence ${name.confidence}% · ${name.ms} ms`;
+    $("nameMeta").textContent =
+      `confidence ${name.confidence}% · ${nameTries.map((t) => t.ms).join("+")} ms`;
 
-    const number = await readCanvas(numberCrop, "number");
-    draw("numberCanvas", number.prepared);
+    // Number: each strip, grayscale then black/white, stop at the first NNN/NNN.
+    const attempts = [];
+    let found = null;
+    for (const regionName of NUMBER_REGIONS) {
+      const crop = cropRegion(card, REGIONS[regionName]);
+      for (const binarize of [false, true]) {
+        const r = await readCanvas(crop, regionName, binarize);
+        attempts.push(`${regionName}${binarize ? " bw" : ""}: ${r.text || "-"} (${r.confidence}%)`);
+        if (r.number && !found) found = { ...r, regionName };
+        if (found) break;
+      }
+      if (found) break;
+    }
+    const shown = found || { prepared: preprocess(cropRegion(card, REGIONS.numberLeft)), confidence: 0, ms: 0 };
+    draw("numberCanvas", shown.prepared);
     $("numberOut").innerHTML = "";
-    const line = document.createElement("span");
-    line.textContent = `number line: ${number.text || "(nothing read)"}`;
+    const line = document.createElement("div");
+    line.textContent = attempts.join("\n");
+    line.style.whiteSpace = "pre-wrap";
     $("numberOut").appendChild(line);
-    if (number.number) {
+    if (found) {
       const parsed = document.createElement("div");
       parsed.className = "ok";
-      parsed.textContent = `collector number found: ${number.number}`;
+      parsed.textContent = `collector number found: ${found.number} (${found.regionName})`;
       $("numberOut").appendChild(parsed);
     }
-    $("numberMeta").textContent = `confidence ${number.confidence}% · ${number.ms} ms`;
+    $("numberMeta").textContent = found ? `confidence ${found.confidence}%` : "no collector number found";
     $("ocrStatus").textContent = "Done. Compare the text above with the card.";
   } catch (e) {
     $("ocrStatus").textContent = "Failed";

@@ -19,6 +19,7 @@ One row per decision. Newest last.
 | 2026-11-16 | The owner's PC cannot install software, so iloader/SideStore/AltServer (which need iTunes drivers on Windows) are not usable from it; PWA test page added as the no-PC route | Native route needs a computer with installed tools for the first install |
 | 2026-11-16 | PWA test on iPhone (iOS 27.2.1) passed: installs from the Home Screen, starts offline, camera 2160x3840; Safari does not expose focus control; web storage is not guaranteed persistent, so backups are mandatory | Real-device test |
 | 2026-11-16 | Route: PWA first with an OCR read test; the native app (SideInstaller + SideStore) only if browser OCR proves too weak | Owner's choice. No PC software needed; keeps zero cost |
+| 2026-11-16 | OCR test v0.3.0: wider strips, several number strips (bottom-left, bottom-right, full bottom), grayscale then black/white retry, coloured boxes drawn on the captured photo | First real read (sleeved Eevee, e-Reader era) returned nothing useful; the boxes show whether the crop or the image quality is at fault |
 
 ## Open
 
