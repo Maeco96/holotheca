@@ -10,7 +10,7 @@ python3 etl/build_catalogue.py /tmp/tcgdex --out /tmp/catalogue.sqlite
 python3 etl/export_scan_index.py /tmp/catalogue.sqlite --out /tmp/scan-index.json
 
 # replay the log against the current web/recognize.js
-node tools/scanlog/replay.js scrinium-letture-2026-11-16.json /tmp/scan-index.json \
+node tools/scanlog/replay.js holotheca-letture-2026-11-16.json /tmp/scan-index.json \
   --labels labels.json --photos /tmp/scan-photos --json run.json
 ```
 

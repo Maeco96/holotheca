@@ -8,7 +8,7 @@
 //   node tools/scanlog/replay.js LOG.json INDEX.json [--labels LABELS.json] [--photos DIR]
 //                                [--json OUT.json] [--verbose]
 //
-//   LOG.json     the exported file (scrinium-letture-YYYY-MM-DD.json)
+//   LOG.json     the exported file (holotheca-letture-YYYY-MM-DD.json; the "kind" field stays "scrinium-scan-log")
 //   INDEX.json   web/data/scan-index.json, built by etl/export_scan_index.py
 //   --labels     {"<reading id>": "<card key>" | "skip"}: the right card for readings where the
 //                owner picked none, or a correction of a wrong pick; "skip" drops a reading
