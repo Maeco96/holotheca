@@ -130,6 +130,22 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(inferred("base1-8"), [])
         self.assertEqual(inferred("base1-4")[0][1], 0)
 
+    def test_scan_index_export(self):
+        import export_scan_index
+        import json
+
+        out = Path(self.tmp.name) / "scan-index.json"
+        stats = export_scan_index.export(self.out, out)
+        index = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual(stats["cards"], len(index["cards"]))
+        sets = {row[0]: i for i, row in enumerate(index["sets"])}
+        charizard = next(c for c in index["cards"] if c[0] == sets["base1"] and c[1] == "4")
+        self.assertEqual(charizard[2], 120)
+        # English name first, then Italian (same text here), then the others.
+        self.assertEqual([index["names"][i] for i in charizard[3]], ["Charizard", "Dracaufeu"])
+        self.assertEqual(index["illustrators"][charizard[4]], "Mitsuhiro Arita")
+        self.assertEqual(index["sets"][sets["base1"]][1:3], ["BS", 102])
+
     def test_search_and_foreign_keys(self):
         hit = self.db.execute("SELECT card_id FROM card_search WHERE card_search MATCH 'dracaufeu*'").fetchall()
         self.assertEqual(len(hit), 1)

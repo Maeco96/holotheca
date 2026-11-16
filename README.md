@@ -20,8 +20,9 @@ runtime.
 | Path | Content |
 | --- | --- |
 | `etl/` | Scripts that build and check the catalogue |
-| `tests/` | Unit tests for the ETL |
-| `web/` | PWA test page (camera, install, offline), published with GitHub Pages |
+| `tests/` | Unit tests for the ETL and for the scanner matching |
+| `web/` | PWA scanner test page (camera, text reading, catalogue matching), published with GitHub Pages |
+| `tools/ppocr/` | Rebuilds the vendored text reader in `web/vendor/ppocr/` |
 | `db/` | SQLite schemas: `catalogue.sql` (rebuilt by the ETL) and `collection.sql` (personal data) |
 | `docs/DECISIONS.md` | Decision log |
 | `docs/coverage/` | Generated reports on source coverage |
@@ -45,3 +46,17 @@ Takes about 10 seconds and produces a 21 MB SQLite file (7 MB gzipped). Correcti
 `etl/overrides/external_ids.csv` and are applied on every build.
 
 Requires Python 3.9 or newer, no third-party packages.
+
+## Scanner
+
+The page in `web/` reads every text line on the card with PaddleOCR (on the device, nothing is uploaded),
+then `web/recognize.js` ranks catalogue cards by name, collector number, HP, set code and illustrator.
+The owner always confirms the card and its print variant by hand.
+
+```sh
+python3 etl/export_scan_index.py build/catalogue.sqlite --out web/data/scan-index.json   # card index, 1.8 MB
+node --test tests/test_recognize.js
+python3 -m http.server 8000 --directory web                                              # then open localhost:8000
+```
+
+The Pages workflow builds the card index at every deployment; `web/data/` is not committed.

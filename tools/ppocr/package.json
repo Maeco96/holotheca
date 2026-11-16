@@ -1,0 +1,14 @@
+{
+  "name": "scrinium-ppocr-bundle",
+  "private": true,
+  "description": "Builds web/vendor/ppocr: PaddleOCR (PP-OCRv4) text detection and recognition for the browser.",
+  "scripts": {
+    "build": "sh build.sh"
+  },
+  "dependencies": {
+    "@gutenye/ocr-browser": "1.4.9",
+    "@gutenye/ocr-models": "1.4.2",
+    "esbuild": "^0.25.0",
+    "onnxruntime-web": "1.31.1"
+  }
+}

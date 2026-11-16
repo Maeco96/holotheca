@@ -1,30 +1,10 @@
-// Phase 0 test page for the PWA route: camera, install, offline and an OCR read test.
+// Scanner test page: camera, text reading (PaddleOCR, on the phone) and catalogue matching.
 // Nothing is stored or uploaded; the captured frame stays in memory on the device.
-const VERSION = "0.6.0";
+const VERSION = "0.7.0";
 const $ = (id) => document.getElementById(id);
 
-// Card size in mm; the guide frame uses the same ratio.
-const CARD_RATIO = 63 / 88;
-
-// Where to look on the card, as fractions of the card rectangle inside the guide frame.
-// Names sit top-left; the collector number and set code sit on the bottom strip.
-const NUMBER_WHITELIST = "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ-";
-const REGIONS = {
-  // Name and HP sit on the top line on every era; they are read separately so the card edge
-  // and the energy symbol do not disturb the name.
-  name: { x: 0.08, y: 0.015, w: 0.55, h: 0.10, psm: "7", whitelist: "" },
-  hp: { x: 0.55, y: 0.015, w: 0.45, h: 0.10, psm: "7", whitelist: "0123456789HP " },
-};
-// The number sits bottom-left on modern cards and bottom-right on older ones, on a thin line
-// between other text. Narrow overlapping windows are read one by one, the first NNN/NNN wins.
-const NUMBER_REGIONS = [];
-for (let y = 0.86; y < 0.955; y += 0.0125) {
-  for (const x of [0.0, 0.15, 0.3, 0.45, 0.6, 0.7]) {
-    const key = `n${y.toFixed(4)}_${x}`;
-    REGIONS[key] = { x, y, w: 0.3, h: 0.035, psm: "7", whitelist: NUMBER_WHITELIST };
-    NUMBER_REGIONS.push(key);
-  }
-}
+const OCR_MAX_WIDTH = 1280; // captured card is scaled down to this width before reading
+const FRAME_MARGIN = 0.03; // extra area captured around the guide frame, as a share of its size
 
 $("version").textContent = VERSION;
 $("standalone").textContent =
@@ -38,12 +18,16 @@ function showError(message) {
   el.hidden = false;
 }
 
-// Offline support: the service worker caches the app shell and the OCR files.
+function absolute(path) {
+  return new URL(path, document.baseURI).href;
+}
+
+// Offline support: the service worker caches the app shell, the OCR files and the card index.
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker
     .register("sw.js")
     .then(() => navigator.serviceWorker.ready)
-    .then(() => { $("offline").textContent = "app shell yes; OCR files after the first read"; })
+    .then(() => { $("offline").textContent = "app shell yes; OCR files and card index after the first read"; })
     .catch((e) => { $("offline").textContent = "no (" + e.message + ")"; });
 } else {
   $("offline").textContent = "not supported";
@@ -64,9 +48,9 @@ if ("serviceWorker" in navigator) {
 // ---------- Camera ----------
 
 let stream = null;
-
 let track = null;
 let torchOn = false;
+let lensChosenByUser = false;
 
 async function applyAdvanced(constraint) {
   try {
@@ -78,16 +62,35 @@ async function applyAdvanced(constraint) {
   }
 }
 
+/**
+ * Picks the plain wide back camera when the phone lists several. The combined "dual" or
+ * "triple" cameras switch lens on their own when the card is close, which changes the picture
+ * mid-scan; ultra wide and telephoto are worse for a card at arm's length.
+ */
+function preferredLens(devices) {
+  const back = devices.filter((d) => !/front|anteriore|frontale|facetime|user/i.test(d.label));
+  const plain = back.filter(
+    (d) => d.label && !/ultra|tele|dual|doppia|triple|tripla|wide|grandangol|macro|lidar|depth|profondit/i.test(d.label)
+  );
+  return plain.length === 1 ? plain[0] : null;
+}
+
 /** Shows only the controls this browser actually exposes for the running camera track. */
-function setupControls() {
+async function setupControls() {
   const caps = track.getCapabilities ? track.getCapabilities() : {};
-  const s = track.getSettings();
+  let s = track.getSettings();
   $("controls").hidden = false;
 
   if (caps.zoom && typeof caps.zoom.max === "number") {
     const z = $("zoom");
-    z.min = caps.zoom.min; z.max = caps.zoom.max; z.step = caps.zoom.step || 0.1;
-    z.value = s.zoom || caps.zoom.min;
+    z.min = caps.zoom.min; z.max = Math.min(caps.zoom.max, 6); z.step = caps.zoom.step || 0.1;
+    // A little zoom lets the phone stay about 20 cm away, where the main lens focuses well.
+    const wanted = Math.min(Math.max(2, caps.zoom.min), caps.zoom.max);
+    if (!s.zoom || s.zoom < wanted) {
+      await applyAdvanced({ zoom: wanted });
+      s = track.getSettings();
+    }
+    z.value = s.zoom || wanted;
     $("zoomVal").textContent = Number(z.value).toFixed(1) + "x";
     $("zoomRow").hidden = false;
     z.oninput = async () => {
@@ -102,7 +105,10 @@ function setupControls() {
     const f = $("focus");
     f.innerHTML = "";
     for (const mode of caps.focusMode) f.add(new Option(mode, mode));
-    f.value = s.focusMode || caps.focusMode[0];
+    if (caps.focusMode.includes("continuous") && s.focusMode !== "continuous") {
+      await applyAdvanced({ focusMode: "continuous" });
+    }
+    f.value = track.getSettings().focusMode || caps.focusMode[0];
     f.onchange = () => applyAdvanced({ focusMode: f.value });
     $("focusRow").hidden = false;
   } else {
@@ -124,36 +130,42 @@ function setupControls() {
   }
 
   const exposed = Object.keys(caps).sort().join(", ") || "none";
+  const zoom = s.zoom ? `, zoom ${Number(s.zoom).toFixed(1)}x` : "";
   $("camera").textContent =
-    `${s.width}x${s.height}, ${track.label || "camera"}; exposed controls: ${exposed}`;
+    `${s.width}x${s.height}${zoom}, ${track.label || "camera"}; exposed controls: ${exposed}`;
 }
 
-async function fillLensList(currentId) {
-  const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
-  const lens = $("lens");
-  lens.innerHTML = "";
-  for (const d of devices) lens.add(new Option(d.label || "camera", d.deviceId));
-  if (currentId) lens.value = currentId;
-  lens.onchange = () => startCamera(lens.value);
+async function openStream(deviceId) {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  const video = {
+    width: { ideal: 3840 },
+    height: { ideal: 2160 },
+    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" } }),
+  };
+  stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
+  const el = $("video");
+  el.srcObject = stream;
+  await el.play();
+  track = stream.getVideoTracks()[0];
 }
 
 async function startCamera(deviceId) {
   $("start").disabled = true;
+  $("error").hidden = true;
   try {
-    if (stream) stream.getTracks().forEach((t) => t.stop());
-    const video = {
-      width: { ideal: 3840 },
-      height: { ideal: 2160 },
-      ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" } }),
-    };
-    stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
-    const el = $("video");
-    el.srcObject = stream;
-    await el.play();
-    track = stream.getVideoTracks()[0];
+    await openStream(deviceId);
     // Labels and the full lens list only appear once the camera permission is granted.
-    await fillLensList(track.getSettings().deviceId);
-    setupControls();
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
+    if (!deviceId && !lensChosenByUser) {
+      const better = preferredLens(devices);
+      if (better && better.deviceId !== track.getSettings().deviceId) await openStream(better.deviceId);
+    }
+    const lens = $("lens");
+    lens.innerHTML = "";
+    for (const d of devices) lens.add(new Option(d.label || "camera", d.deviceId));
+    lens.value = track.getSettings().deviceId || "";
+    lens.onchange = () => { lensChosenByUser = true; startCamera(lens.value); };
+    await setupControls();
     $("start").textContent = "Camera running";
     $("read").disabled = false;
   } catch (e) {
@@ -165,7 +177,7 @@ async function startCamera(deviceId) {
 
 // ---------- Capture ----------
 
-/** Guide frame rectangle in video pixel coordinates (accounts for object-fit: cover). */
+/** Guide frame rectangle (plus a small margin) in video pixels; accounts for object-fit: cover. */
 function frameRectInVideo() {
   const video = $("video");
   const vr = video.getBoundingClientRect();
@@ -175,233 +187,212 @@ function frameRectInVideo() {
   const scale = Math.max(vr.width / vw, vr.height / vh);
   const offsetX = (vr.width - vw * scale) / 2;
   const offsetY = (vr.height - vh * scale) / 2;
-  const x = Math.max(0, (fr.left - vr.left - offsetX) / scale);
-  const y = Math.max(0, (fr.top - vr.top - offsetY) / scale);
-  const w = Math.min(vw - x, fr.width / scale);
-  const h = Math.min(vh - y, fr.height / scale);
-  return { x, y, w, h };
+  const mx = fr.width * FRAME_MARGIN;
+  const my = fr.height * FRAME_MARGIN;
+  const x0 = Math.max(0, (fr.left - mx - vr.left - offsetX) / scale);
+  const y0 = Math.max(0, (fr.top - my - vr.top - offsetY) / scale);
+  const x1 = Math.min(vw, (fr.right + mx - vr.left - offsetX) / scale);
+  const y1 = Math.min(vh, (fr.bottom + my - vr.top - offsetY) / scale);
+  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
-function captureCard() {
+function grabFrame() {
   const video = $("video");
   const r = frameRectInVideo();
+  const scale = Math.min(1, OCR_MAX_WIDTH / r.w);
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(r.w);
-  canvas.height = Math.round(r.h);
-  canvas.getContext("2d").drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
-  return canvas;
-}
-
-function cropRegion(card, region) {
-  const x = Math.round(card.width * region.x);
-  const y = Math.round(card.height * region.y);
-  const w = Math.round(card.width * region.w);
-  const h = Math.round(card.height * region.h);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  canvas.getContext("2d").drawImage(card, x, y, w, h, 0, 0, w, h);
-  return canvas;
-}
-
-/** Black/white by comparing each pixel with the mean of its neighbourhood (copes with glare gradients). */
-function adaptiveThreshold(d, w, h) {
-  const radius = Math.max(8, Math.round(h / 3));
-  const integral = new Float64Array((w + 1) * (h + 1));
-  for (let y = 0; y < h; y++) {
-    let row = 0;
-    for (let x = 0; x < w; x++) {
-      row += d[(y * w + x) * 4];
-      integral[(y + 1) * (w + 1) + x + 1] = integral[y * (w + 1) + x + 1] + row;
-    }
-  }
-  const out = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) {
-    const y0 = Math.max(0, y - radius), y1 = Math.min(h, y + radius + 1);
-    for (let x = 0; x < w; x++) {
-      const x0 = Math.max(0, x - radius), x1 = Math.min(w, x + radius + 1);
-      const sum = integral[y1 * (w + 1) + x1] - integral[y0 * (w + 1) + x1]
-        - integral[y1 * (w + 1) + x0] + integral[y0 * (w + 1) + x0];
-      const mean = sum / ((x1 - x0) * (y1 - y0));
-      out[y * w + x] = d[(y * w + x) * 4] < mean * 0.9 ? 0 : 255;
-    }
-  }
-  for (let i = 0; i < out.length; i++) d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = out[i];
-}
-
-/** Grayscale, upscale small strips and stretch contrast between the 2nd and 98th percentile. */
-function preprocess(source, minHeight = 140, binarize = false) {
-  const scale = Math.max(1, minHeight / source.height);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(source.width * scale);
-  canvas.height = Math.round(source.height * scale);
+  canvas.width = Math.round(r.w * scale);
+  canvas.height = Math.round(r.h * scale);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
-
-  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
-  const d = image.data;
-  const histogram = new Uint32Array(256);
-  for (let i = 0; i < d.length; i += 4) {
-    const gray = ((d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000) | 0;
-    d[i] = gray;
-    histogram[gray]++;
-  }
-  const total = canvas.width * canvas.height;
-  let low = 0;
-  let high = 255;
-  let seen = 0;
-  for (let v = 0; v < 256; v++) {
-    seen += histogram[v];
-    if (seen >= total * 0.02) { low = v; break; }
-  }
-  seen = 0;
-  for (let v = 255; v >= 0; v--) {
-    seen += histogram[v];
-    if (seen >= total * 0.02) { high = v; break; }
-  }
-  const span = Math.max(1, high - low);
-  for (let i = 0; i < d.length; i += 4) {
-    const gray = Math.max(0, Math.min(255, (((d[i] - low) * 255) / span) | 0));
-    d[i] = d[i + 1] = d[i + 2] = gray;
-    d[i + 3] = 255;
-  }
-  if (binarize) adaptiveThreshold(d, canvas.width, canvas.height);
-  ctx.putImageData(image, 0, 0);
+  ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
+  canvas.sourceWidth = Math.round(r.w);
   return canvas;
 }
 
-// ---------- OCR ----------
-
-let workerPromise = null;
-
-function absolute(path) {
-  return new URL(path, location.href).href;
+/** Sharpness as the mean squared difference between neighbouring pixels of a small grey copy. */
+function sharpness(canvas) {
+  const w = 256;
+  const h = Math.round((canvas.height / canvas.width) * w);
+  const small = document.createElement("canvas");
+  small.width = w;
+  small.height = h;
+  const ctx = small.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(canvas, 0, 0, w, h);
+  const d = ctx.getImageData(0, 0, w, h).data;
+  let sum = 0;
+  for (let y = 0; y < h - 1; y++) {
+    for (let x = 0; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      const g = d[i] + d[i + 1] + d[i + 2];
+      const right = d[i + 4] + d[i + 5] + d[i + 6];
+      const below = d[i + w * 4] + d[i + w * 4 + 1] + d[i + w * 4 + 2];
+      sum += (g - right) * (g - right) + (g - below) * (g - below);
+    }
+  }
+  return sum / (w * h);
 }
 
-function getWorker() {
-  if (typeof Tesseract === "undefined") {
-    throw new Error("OCR library not loaded");
+/** Takes a few frames a moment apart and keeps the sharpest: hands shake and focus hunts. */
+async function captureSharpest(count = 5, gapMs = 110) {
+  let best = null;
+  let bestScore = -1;
+  for (let i = 0; i < count; i++) {
+    const frame = grabFrame();
+    const score = sharpness(frame);
+    if (score > bestScore) { best = frame; bestScore = score; }
+    if (i < count - 1) await new Promise((resolve) => setTimeout(resolve, gapMs));
   }
-  if (!workerPromise) {
-    workerPromise = Tesseract.createWorker("eng", 1, {
-      workerPath: absolute("vendor/tesseract/worker.min.js"),
-      corePath: absolute("vendor/tesseract/core"),
-      langPath: absolute("vendor/tesseract/tessdata"),
-      workerBlobURL: false,
-      cacheMethod: "none",
-      gzip: true,
-      logger: (m) => {
-        if (m.status && m.status !== "recognizing text") {
-          $("ocrStatus").textContent = `${m.status} ${Math.round((m.progress || 0) * 100)}%`;
-        }
-      },
-    }).catch((e) => { workerPromise = null; throw e; });
-  }
-  return workerPromise;
+  best.sharpness = Math.round(bestScore);
+  return best;
 }
 
-/** Reads one region. Returns the raw text, confidence, time and the parsed number if any. */
-async function readCanvas(canvas, regionName, binarize = false) {
-  const region = REGIONS[regionName];
-  const worker = await getWorker();
-  await worker.setParameters({
-    tessedit_pageseg_mode: region.psm,
-    tessedit_char_whitelist: region.whitelist,
+// ---------- Text reading and catalogue ----------
+
+let enginePromise = null;
+let indexPromise = null;
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const el = document.createElement("script");
+    el.src = src;
+    el.onload = resolve;
+    el.onerror = () => reject(new Error(`could not load ${src}`));
+    document.head.appendChild(el);
   });
-  const prepared = preprocess(canvas, 140, binarize);
-  const t0 = performance.now();
-  const { data } = await worker.recognize(prepared);
-  const ms = Math.round(performance.now() - t0);
-  const text = data.text.replace(/\s+/g, " ").trim();
-  const match = text.match(/(\d{1,3})\s*\/\s*(\d{1,3})/);
-  return {
-    text,
-    confidence: Math.round(data.confidence),
-    ms,
-    number: match ? `${match[1]}/${match[2]}` : null,
-    prepared,
-  };
 }
 
-function draw(canvasId, source) {
-  const target = $(canvasId);
-  target.width = source.width;
-  target.height = source.height;
-  target.getContext("2d").drawImage(source, 0, 0);
-}
-
-/** Draws the OCR strips on the captured card so a wrong crop is visible at once. */
-function outlineRegions() {
-  const canvas = $("cardCanvas");
-  const ctx = canvas.getContext("2d");
-  ctx.lineWidth = Math.max(4, canvas.width / 250);
-  const boxes = [
-    ["#00e0ff", REGIONS.name],
-    ["#ff4dd2", REGIONS.hp],
-    ["#7dff7d", { x: 0, y: 0.84, w: 1, h: 0.16 }],
-  ];
-  for (const [color, r] of boxes) {
-    ctx.strokeStyle = color;
-    ctx.strokeRect(r.x * canvas.width, r.y * canvas.height, r.w * canvas.width, r.h * canvas.height);
+/** Loads the reader (about 40 MB, once; cached for offline use afterwards). */
+function getEngine() {
+  if (!enginePromise) {
+    enginePromise = (async () => {
+      $("ocrStatus").textContent = "Loading the reader (about 40 MB the first time)…";
+      await loadScript(absolute("vendor/ppocr/ppocr.js"));
+      const { Ocr, ort } = window.ScriniumOcr;
+      ort.env.wasm.wasmPaths = absolute("vendor/ppocr/");
+      ort.env.wasm.numThreads = 1; // threads need cross-origin isolation, which GitHub Pages lacks
+      return Ocr.create({
+        models: {
+          detectionPath: absolute("vendor/ppocr/models/ch_PP-OCRv4_det_infer.onnx"),
+          recognitionPath: absolute("vendor/ppocr/models/ch_PP-OCRv4_rec_infer.onnx"),
+          dictionaryPath: absolute("vendor/ppocr/models/ppocr_keys_v1.txt"),
+        },
+      });
+    })().catch((e) => { enginePromise = null; throw e; });
   }
+  return enginePromise;
+}
+
+/** Loads the card index built from the catalogue. Missing index: reading still works, matching does not. */
+function getIndex() {
+  if (!indexPromise) {
+    indexPromise = fetch(absolute("data/scan-index.json"))
+      .then((response) => {
+        if (!response.ok) throw new Error(`card index: HTTP ${response.status}`);
+        return response.json();
+      })
+      .then((raw) => {
+        $("catalogue").textContent =
+          `${raw.cards.length} cards, ${raw.sets.length} sets (TCGdex ${String(raw.tcgdex_revision || "?").slice(0, 8)})`;
+        return ScriniumRecognize.prepareIndex(raw);
+      })
+      .catch((e) => {
+        $("catalogue").textContent = `not available (${e.message})`;
+        return null;
+      });
+  }
+  return indexPromise;
+}
+
+/** Reads every text line on the card image and ranks catalogue cards against it. */
+async function recognizeCanvas(canvas) {
+  const [engine, index] = await Promise.all([getEngine(), getIndex()]);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const t0 = performance.now();
+  const result = await engine.detect({ data: image.data, width: image.width, height: image.height });
+  const readMs = Math.round(performance.now() - t0);
+  const width = result.resizedImageWidth || canvas.width;
+  const height = result.resizedImageHeight || canvas.height;
+  const reading = ScriniumRecognize.parse(result.texts, width, height);
+  const t1 = performance.now();
+  const candidates = index ? ScriniumRecognize.match(index, reading, 5) : [];
+  return { reading, candidates, readMs, matchMs: Math.round(performance.now() - t1), width, height };
+}
+
+// ---------- Result display ----------
+
+function drawResult(canvas, outcome) {
+  const target = $("cardCanvas");
+  target.width = canvas.width;
+  target.height = canvas.height;
+  const ctx = target.getContext("2d");
+  ctx.drawImage(canvas, 0, 0);
+  ctx.lineWidth = Math.max(2, canvas.width / 400);
+  ctx.strokeStyle = "#00e0ff";
+  for (const line of outcome.reading.lines) {
+    ctx.strokeRect(line.x * canvas.width, line.y * canvas.height, line.w * canvas.width, line.h * canvas.height);
+  }
+}
+
+function element(tag, className, text) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  if (text !== undefined) el.textContent = text;
+  return el;
+}
+
+function showOutcome(canvas, outcome) {
+  drawResult(canvas, outcome);
+  const { reading, candidates } = outcome;
+  $("cardMeta").textContent =
+    `Read at ${canvas.width}x${canvas.height} px (camera area ${canvas.sourceWidth || canvas.width} px wide, ` +
+    `sharpness ${canvas.sharpness ?? "n/a"}) · reading ${outcome.readMs} ms · matching ${outcome.matchMs} ms`;
+
+  const numbers = reading.numbers.map((n) => `${n.number}/${n.total}`).join(", ");
+  const loose = reading.looseNumbers.join(", ");
+  $("readingOut").textContent =
+    `top lines: ${reading.nameCandidates.map((c) => c.text).join(" | ") || "(none)"}\n` +
+    `HP: ${reading.hp ?? "(none)"}\n` +
+    `number: ${numbers || "(none)"}${loose ? `  bare: ${loose}` : ""}\n` +
+    `bottom text: ${reading.bottomText || "(none)"}`;
+
+  const list = $("candidates");
+  list.innerHTML = "";
+  if (!candidates.length) {
+    list.appendChild(element("li", "note", "No catalogue card matches this reading."));
+  }
+  candidates.forEach((c, i) => {
+    const li = element("li", i === 0 ? "candidate best" : "candidate");
+    li.appendChild(element("div", "title", `${c.name}  ·  ${c.number}/${c.official ?? "?"}`));
+    li.appendChild(element("div", "meta",
+      `${c.setName} (${c.setCode || c.setId})${c.hp ? ` · HP ${c.hp}` : ""} · score ${Math.round(c.score * 100)}%`));
+    li.appendChild(element("div", "meta", `matched on: ${c.evidence.join(", ") || "nothing"}`));
+    list.appendChild(li);
+  });
+  const best = candidates[0];
+  const second = candidates[1];
+  $("verdict").textContent = !best
+    ? "Not recognised."
+    : best.score >= 0.75 && (!second || best.score - second.score >= 0.15)
+      ? "Confident match. Check it is the right card."
+      : "Unsure: pick the right card from the list, or read again.";
+
+  $("allLines").textContent = reading.lines
+    .map((line) => `${line.text}  (${Math.round(line.confidence * 100)}%)`)
+    .join("\n");
 }
 
 async function captureAndRead() {
   $("read").disabled = true;
   $("error").hidden = true;
   try {
-    const card = captureCard();
-    draw("cardCanvas", card);
-    $("cardMeta").textContent =
-      `Card area captured: ${card.width}x${card.height} px (about ${(card.width / 63).toFixed(1)} px/mm across the card)`;
-
+    $("ocrStatus").textContent = "Capturing…";
+    const card = await captureSharpest();
     $("ocrStatus").textContent = "Reading…";
-    outlineRegions();
-
-    // Name and HP: grayscale and black/white attempts, keep the more confident one.
-    const best = async (regionName) => {
-      const crop = cropRegion(card, REGIONS[regionName]);
-      const tries = [await readCanvas(crop, regionName, false), await readCanvas(crop, regionName, true)];
-      return tries.reduce((top, t) => (t.confidence > top.confidence ? t : top));
-    };
-    const name = await best("name");
-    const hpRead = await best("hp");
-    draw("nameCanvas", name.prepared);
-    const hp = (hpRead.text.match(/(\d{2,3})/) || [])[1];
-    const nameOnly = name.text.replace(/[^\p{L}\p{N}' .:-]+/gu, " ").replace(/\s+/g, " ").trim();
-    $("nameOut").textContent = `name: ${nameOnly || "(nothing read)"}\nHP: ${hp || "(nothing read)"}  [${hpRead.text || "-"}]`;
-    $("nameOut").style.whiteSpace = "pre-wrap";
-    $("nameMeta").textContent = `confidence name ${name.confidence}% · HP ${hpRead.confidence}%`;
-
-    // Number: each strip, grayscale then black/white, stop at the first NNN/NNN.
-    const attempts = [];
-    let found = null;
-    for (const regionName of NUMBER_REGIONS) {
-      const crop = cropRegion(card, REGIONS[regionName]);
-      for (const binarize of [false, true]) {
-        const r = await readCanvas(crop, regionName, binarize);
-        if (r.text) attempts.push(`${regionName.slice(1)}${binarize ? " bw" : ""}: ${r.text}`);
-        if (r.number && !found) found = { ...r, regionName };
-        if (found) break;
-      }
-      if (found) break;
-    }
-    const shown = found || { prepared: preprocess(cropRegion(card, REGIONS[NUMBER_REGIONS[0]])), confidence: 0, ms: 0 };
-    draw("numberCanvas", shown.prepared);
-    $("numberOut").innerHTML = "";
-    const line = document.createElement("div");
-    line.textContent = `${attempts.length} reads with text; last: \n` + attempts.slice(-10).join("\n");
-    line.style.whiteSpace = "pre-wrap";
-    $("numberOut").appendChild(line);
-    if (found) {
-      const parsed = document.createElement("div");
-      parsed.className = "ok";
-      parsed.textContent = `collector number found: ${found.number} (${found.regionName})`;
-      $("numberOut").appendChild(parsed);
-    }
-    $("numberMeta").textContent = found ? `confidence ${found.confidence}%` : "no collector number found";
-    $("ocrStatus").textContent = "Done. Compare the text above with the card.";
+    const outcome = await recognizeCanvas(card);
+    showOutcome(card, outcome);
+    $("ocrStatus").textContent = "Done.";
   } catch (e) {
     $("ocrStatus").textContent = "Failed";
     showError(`${e.name}: ${e.message}`);
@@ -414,4 +405,4 @@ $("start").addEventListener("click", () => startCamera());
 $("read").addEventListener("click", captureAndRead);
 
 // Hook used by automated checks.
-window.scriniumTest = { readCanvas, preprocess, REGIONS, NUMBER_REGIONS, CARD_RATIO };
+window.scriniumTest = { recognizeCanvas, showOutcome, preferredLens, sharpness };
