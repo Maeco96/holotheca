@@ -4,11 +4,13 @@
 const ScanLog = (() => {
   "use strict";
 
+  // Storage names keep the old working name so existing scan logs survive the rename.
   const DB_NAME = "scrinium-scanlog";
   const STORE = "readings";
   const FLAG = "scrinium.scanlog.enabled";
   const MAX_ENTRIES = 150; // oldest readings are dropped beyond this
   let dbPromise = null;
+  let lastError = null;
 
   function enabled() {
     try { return localStorage.getItem(FLAG) === "1"; } catch (e) { return false; }
@@ -41,8 +43,10 @@ const ScanLog = (() => {
     });
   }
 
+  // The photo is stored as a data URL string, not a Blob: Safari in private browsing refuses
+  // to store Blobs in IndexedDB, which left the 0.8.0 log empty without any message.
   function toJpeg(canvas) {
-    return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+    return canvas.toDataURL("image/jpeg", 0.85);
   }
 
   function toDataUrl(blob) {
@@ -58,16 +62,18 @@ const ScanLog = (() => {
   async function record(canvas, entry) {
     if (!enabled()) return null;
     try {
-      const photo = await toJpeg(canvas);
+      const photo = toJpeg(canvas);
       const id = await run("readwrite", (store) => store.add({ ...entry, at: new Date().toISOString(), chosen: null, photo }));
       const keys = await run("readonly", (store) => store.getAllKeys());
       if (keys.length > MAX_ENTRIES) {
         const extra = keys.slice(0, keys.length - MAX_ENTRIES);
         await run("readwrite", (store) => { extra.forEach((key) => store.delete(key)); });
       }
+      lastError = null;
       return id;
     } catch (e) {
       console.warn("scan log not written:", e);
+      lastError = (e && (e.message || e.name)) || String(e);
       return null;
     }
   }
@@ -103,12 +109,13 @@ const ScanLog = (() => {
     const rows = await run("readonly", (store) => store.getAll());
     const readings = [];
     for (const row of rows) {
-      readings.push({ ...row, photo: row.photo ? await toDataUrl(row.photo) : null });
+      const photo = !row.photo ? null : typeof row.photo === "string" ? row.photo : await toDataUrl(row.photo);
+      readings.push({ ...row, photo });
     }
     const body = JSON.stringify({ kind: "scrinium-scan-log", exported_at: new Date().toISOString(), ...about, readings });
-    const name = `scrinium-letture-${new Date().toISOString().slice(0, 10)}.json`;
+    const name = `holotheca-letture-${new Date().toISOString().slice(0, 10)}.json`;
     return new File([body], name, { type: "application/json" });
   }
 
-  return { enabled, setEnabled, record, choose, count, clear, exportFile };
+  return { enabled, setEnabled, record, choose, count, clear, exportFile, lastError: () => lastError };
 })();

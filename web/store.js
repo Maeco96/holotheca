@@ -4,6 +4,7 @@
 const Store = (() => {
   "use strict";
 
+  // Storage names keep the old working name so existing collections survive the rename.
   const KEY = "scrinium.collection.v1";
   let state = null;
 
@@ -118,11 +119,11 @@ const Store = (() => {
     return JSON.stringify({ ...read(), exported_at: new Date().toISOString() }, null, 2);
   }
 
-  /** Replaces the collection with an exported file. Throws when the file is not a Scrinium export. */
+  /** Replaces the collection with an exported file. Throws when the file is not a Holotheca export. */
   function importJson(text) {
     const data = JSON.parse(text);
     if (!data || !Array.isArray(data.owned_copies) || !Array.isArray(data.binders)) {
-      throw new Error("Il file non è un'esportazione di Scrinium.");
+      throw new Error("Il file non è un'esportazione di Holotheca.");
     }
     state = { version: 1, next_id: data.next_id || 1, binders: data.binders, owned_copies: data.owned_copies };
     const highest = Math.max(0, ...state.binders.map((b) => b.id), ...state.owned_copies.map((c) => c.id));

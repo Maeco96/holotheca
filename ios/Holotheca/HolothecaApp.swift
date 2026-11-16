@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct ScriniumApp: App {
+struct HolothecaApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()

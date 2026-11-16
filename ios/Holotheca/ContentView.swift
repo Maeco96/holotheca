@@ -9,7 +9,7 @@ struct ContentView: View {
         let info = Bundle.main.infoDictionary
         let version = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
-        return "Scrinium \(version) (\(build))"
+        return "Holotheca \(version) (\(build))"
     }
 
     var body: some View {
@@ -31,7 +31,7 @@ struct ContentView: View {
                     }
                     .buttonStyle(.borderedProminent)
                 default:
-                    Text("Camera access is denied. Enable it in Settings > Scrinium.")
+                    Text("Camera access is denied. Enable it in Settings > Holotheca.")
                         .multilineTextAlignment(.center)
                         .foregroundColor(.secondary)
                 }

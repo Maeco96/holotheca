@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Scrinium">
+  <meta name="apple-mobile-web-app-title" content="Holotheca">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#13100d">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
-  <title>Scrinium</title>
+  <title>Holotheca</title>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
-      <!-- A small casket: the "scrinium". -->
+      <!-- A small casket: where the collection is kept. -->
       <symbol id="i-chest" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 11V8.5A4.5 4.5 0 0 1 8.5 4h7A4.5 4.5 0 0 1 20 8.5V11"/><rect x="3" y="11" width="18" height="9" rx="1.5"/>
         <path d="M3 11h18"/><rect x="10.3" y="9.3" width="3.4" height="4.4" rx="1"/><path d="M12 11v1.2"/>
@@ -41,7 +41,7 @@
 
   <header class="topbar">
     <button class="back" id="back" hidden aria-label="Indietro"><svg width="22" height="22"><use href="#i-back"/></svg></button>
-    <div class="wordmark" id="wordmark"><svg><use href="#i-chest"/></svg>Scrinium</div>
+    <div class="wordmark" id="wordmark"><svg><use href="#i-chest"/></svg>Holotheca</div>
     <h1 id="title" hidden></h1>
   </header>
 
@@ -77,8 +77,14 @@
 
       <div id="scanResult" hidden>
         <h2 id="verdict"></h2>
-        <div class="list" id="candidates" style="margin-top:12px"></div>
+        <div id="scanHero"></div>
+        <h3 id="othersTitle" class="muted small" hidden>Altre possibilità</h3>
+        <div class="list" id="candidates"></div>
         <button class="btn ghost block" id="noneRight" hidden style="margin-top:10px">Nessuna è quella giusta</button>
+        <div class="panel photo-panel">
+          <div class="muted small">La tua foto</div>
+          <canvas id="photoCanvas" width="10" height="10"></canvas>
+        </div>
       </div>
 
       <details class="panel" id="camPanel" hidden>
@@ -91,6 +97,7 @@
       </details>
       <details class="panel" id="readPanel" hidden>
         <summary>Dettagli della lettura</summary>
+        <p class="muted small">La foto con le righe di testo trovate.</p>
         <canvas class="debug" id="cardCanvas" width="10" height="10"></canvas>
         <pre class="debug" id="readingOut"></pre>
       </details>
@@ -115,7 +122,7 @@
         <ol>
           <li>Apri questa pagina in Safari.</li>
           <li>Tocca Condividi, poi "Aggiungi alla schermata Home".</li>
-          <li>Apri Scrinium dall'icona: si usa a tutto schermo.</li>
+          <li>Apri Holotheca dall'icona: si usa a tutto schermo.</li>
         </ol>
         <p class="muted small">La prima lettura scarica circa 40 MB, una volta sola: falla con il Wi-Fi. Dopo, lettura e scrigno funzionano anche senza rete; le immagini delle carte e i negozi no.</p>
       </div>
@@ -126,7 +133,7 @@
           <li>Vai su Scansiona e tocca "Avvia la fotocamera". Alla prima richiesta consenti l'uso della fotocamera.</li>
           <li>Metti la carta dentro la cornice dorata, telefono a circa 20 cm, carta dritta e tutta visibile.</li>
           <li>Tocca il pulsante tondo e tieni fermo per un secondo.</li>
-          <li>Compare l'elenco delle carte possibili, la più probabile in alto. Tocca quella giusta per aprirla.</li>
+          <li>In alto compare in grande l'immagine ufficiale della carta più probabile, sotto le altre possibilità e la tua foto. Confrontale: se è giusta tocca "È questa: apri la scheda", altrimenti tocca un'altra possibilità per vederla in grande.</li>
         </ol>
         <p class="muted small">Per leggere meglio: luce uniforme, niente riflessi sulla bustina, sfondo scuro e a tinta unita. Se la sala è buia apri "Fotocamera" sotto il risultato e accendi la torcia; lì trovi anche zoom e scelta dell'obiettivo. Se la carta non esce, cercala per nome.</p>
         <p class="muted small">La percentuale dice quanto il testo letto corrisponde alla carta. La variante (normale, holo, reverse) non la decide mai lo scanner: la scegli tu.</p>
@@ -163,7 +170,7 @@
         <p>Lo scrigno vive solo su questo telefono e iOS può cancellarlo se l'app resta a lungo inutilizzata. Esporta spesso.</p>
         <ol>
           <li>Altro, poi "Esporta": si apre il foglio di condivisione.</li>
-          <li>Scegli "Salva su File" (o inviatelo per posta): è un file <b>scrinium-data.json</b>.</li>
+          <li>Scegli "Salva su File" (o inviatelo per posta): è un file <b>holotheca-data.json</b>.</li>
           <li>Per ripristinare: Altro, "Importa", scegli il file. Sostituisce tutto lo scrigno attuale.</li>
         </ol>
         <p class="muted small">Lo stesso file serve per passare lo scrigno a un altro telefono.</p>
@@ -174,7 +181,7 @@
         <ol>
           <li>Altro, "Registro delle letture": accendi "Registra ogni lettura".</li>
           <li>Scansiona come sempre. Dopo ogni lettura tocca la carta giusta, oppure "Nessuna è quella giusta".</li>
-          <li>Quando hai un po' di letture: Altro, "Esporta registro", e manda il file <b>scrinium-letture-data.json</b> a chi segue l'app.</li>
+          <li>Quando hai un po' di letture: Altro, "Esporta registro", e manda il file <b>holotheca-letture-data.json</b> a chi segue l'app.</li>
           <li>Con "Svuota" liberi lo spazio.</li>
         </ol>
         <p class="muted small">Il registro contiene le foto delle carte lette, il testo trovato, le carte proposte e la tua scelta. Resta sul telefono finché non lo esporti tu. Tiene le ultime 150 letture.</p>
@@ -184,6 +191,7 @@
       <div class="panel">
         <p><b>La fotocamera non parte.</b> Impostazioni, Safari, Fotocamera: consenti. Poi chiudi e riapri l'app.</p>
         <p><b>Non vedo le immagini delle carte.</b> Serve la rete; alcune carte non hanno immagine nel catalogo.</p>
+        <p><b>Il registro esportato è vuoto.</b> Apri l'app dalla schermata Home, non da una scheda privata di Safari: lì le letture non restano salvate.</p>
         <p><b>Non vedo le novità.</b> Chiudi del tutto l'app e riaprila due volte: la versione è scritta in Altro, Stato.</p>
         <p style="margin-bottom:0"><b>Lo scrigno è sparito.</b> Importa l'ultima esportazione.</p>
       </div>
@@ -219,6 +227,7 @@
           <button class="btn ghost" id="logClear">Svuota</button>
         </div>
         <p class="small" id="logInfo" style="margin-bottom:0"></p>
+        <p class="small warn-text" id="tabWarning" hidden style="margin-bottom:0">Stai usando l'app in una scheda di Safari. In navigazione privata Safari cancella scrigno e registro quando chiudi la scheda: aggiungi l'app alla schermata Home e aprila da lì.</p>
       </div>
       <h2>Stato</h2>
       <div class="attrs">

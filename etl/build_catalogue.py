@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the Scrinium catalogue (SQLite) from a local clone of tcgdex/cards-database.
+"""Build the Holotheca catalogue (SQLite) from a local clone of tcgdex/cards-database.
 
 Usage:
     python3 etl/build_catalogue.py /path/to/cards-database --out build/catalogue.sqlite

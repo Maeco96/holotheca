@@ -1,6 +1,6 @@
-// Scrinium app shell: views, navigation and the scan flow.
+// Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.8.0";
+const VERSION = "0.8.1";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -54,13 +54,17 @@ function art(card, { big = false, quality = "low" } = {}) {
   if (!card) return box;
   const urls = Catalogue.imageUrls(card, quality);
   let attempt = 0;
-  const img = el("img", { alt: card.name, loading: "lazy", decoding: "async" });
-  img.addEventListener("load", () => { placeholder.remove(); box.appendChild(img); });
+  if (!urls.length) return box;
+  // The image sits in the box from the start, transparent until loaded: a lazy image that is
+  // not in the document is never fetched, which left every card on its placeholder up to 0.8.0.
+  const img = el("img", { alt: card.name, loading: "lazy", decoding: "async", class: "loading" });
+  img.addEventListener("load", () => { img.classList.remove("loading"); placeholder.remove(); });
   img.addEventListener("error", () => {
     attempt += 1;
     if (attempt < urls.length) img.src = urls[attempt];
   });
-  if (urls.length) img.src = urls[0];
+  img.src = urls[0];
+  box.appendChild(img);
   return box;
 }
 
@@ -188,7 +192,7 @@ function getEngine() {
     enginePromise = (async () => {
       $("scanStatus").textContent = "Carico il lettore (circa 40 MB la prima volta)…";
       await loadScript(absolute("vendor/ppocr/ppocr.js"));
-      const { Ocr, ort } = window.ScriniumOcr;
+      const { Ocr, ort } = window.HolothecaOcr;
       ort.env.wasm.wasmPaths = absolute("vendor/ppocr/");
       ort.env.wasm.numThreads = 1; // threads need cross-origin isolation, which GitHub Pages lacks
       return Ocr.create({
@@ -213,8 +217,8 @@ async function recognizeCanvas(canvas) {
   const readMs = Math.round(performance.now() - t0);
   const width = result.resizedImageWidth || canvas.width;
   const height = result.resizedImageHeight || canvas.height;
-  const reading = ScriniumRecognize.parse(result.texts, width, height);
-  const candidates = index ? ScriniumRecognize.match(index, reading, 5) : [];
+  const reading = HolothecaRecognize.parse(result.texts, width, height);
+  const candidates = index ? HolothecaRecognize.match(index, reading, 5) : [];
   return { reading, candidates, readMs, matchMs: 0, catalogue: Boolean(index) };
 }
 
@@ -227,25 +231,64 @@ function showScan(canvas, outcome) {
     ? "Catalogo non disponibile"
     : !best ? "Carta non riconosciuta" : confident ? "Trovata" : "Quale di queste?";
 
-  const list = $("candidates");
-  list.innerHTML = "";
-  if (!best) {
-    list.appendChild(el("p", { class: "muted", text: "Riprova con più luce e la carta ben dentro la cornice, oppure cercala per nome." }));
-  }
-  candidates.forEach((candidate, i) => {
+  // The card in focus is shown large with its official image, so it can be compared with
+  // the photo below; tapping another candidate brings that one into focus.
+  let focus = 0;
+  const openCard = (card) => { ScanLog.choose(currentLogId, card.key); location.hash = `#/carta/${encodeURIComponent(card.key)}`; };
+  const percentOf = (candidate) => Math.round(candidate.score * 100);
+  const evidenceOf = (candidate) => `Letto: ${candidate.evidence.map((e) => EVIDENCE_LABELS[e] || e).join(", ") || "nulla"}`;
+  const shownOf = (candidate) => {
     const card = Catalogue.card(candidate.cardIndex);
-    const shown = { ...card, name: candidate.name || card.name };
-    const percent = Math.round(candidate.score * 100);
-    list.appendChild(
-      el("button", { class: i === 0 && confident ? "item best" : "item", onclick: () => { ScanLog.choose(currentLogId, card.key); location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
-        art(shown),
-        el("div", { class: "grow" },
+    return { card, shown: { ...card, name: candidate.name || card.name } };
+  };
+
+  function render() {
+    const hero = $("scanHero");
+    const list = $("candidates");
+    hero.innerHTML = "";
+    list.innerHTML = "";
+    if (!best) {
+      hero.appendChild(el("p", { class: "muted", text: "Riprova con più luce e la carta ben dentro la cornice, oppure cercala per nome." }));
+      $("othersTitle").hidden = true;
+      return;
+    }
+    const top = candidates[focus];
+    const { card, shown } = shownOf(top);
+    const percent = percentOf(top);
+    hero.appendChild(
+      el("div", { class: "hero" },
+        art(shown, { big: true, quality: "high" }),
+        el("div", {},
           el("div", { class: "t", text: shown.name }),
           el("div", { class: "s", text: cardLine(card) }),
-          el("div", { class: "s", text: `Letto: ${candidate.evidence.map((e) => EVIDENCE_LABELS[e] || e).join(", ") || "nulla"}` })),
-        el("span", { class: percent >= 75 ? "badge good" : "badge warn", text: `${percent}%` }))
+          el("div", { class: "s", text: evidenceOf(top) })),
+        el("span", { class: percent >= 75 ? "badge good" : "badge warn", text: `${percent}%` }),
+        el("button", { class: "btn primary", text: "È questa: apri la scheda", onclick: () => openCard(card) }))
     );
-  });
+    candidates.forEach((candidate, i) => {
+      if (i === focus) return;
+      const other = shownOf(candidate);
+      const p = percentOf(candidate);
+      list.appendChild(
+        el("button", { class: "item", onclick: () => { focus = i; render(); $("scanHero").scrollIntoView({ behavior: "smooth", block: "start" }); } },
+          art(other.shown),
+          el("div", { class: "grow" },
+            el("div", { class: "t", text: other.shown.name }),
+            el("div", { class: "s", text: cardLine(other.card) }),
+            el("div", { class: "s", text: evidenceOf(candidate) })),
+          el("span", { class: p >= 75 ? "badge good" : "badge warn", text: `${p}%` }))
+      );
+    });
+    $("othersTitle").hidden = candidates.length < 2;
+  }
+  render();
+
+  // The owner's photo, as read, under the official image.
+  const photo = $("photoCanvas");
+  photo.width = canvas.width;
+  photo.height = canvas.height;
+  photo.getContext("2d").drawImage(canvas, 0, 0);
+
   $("scanResult").hidden = false;
   $("noneRight").hidden = !ScanLog.enabled();
   $("noneRight").disabled = false;
@@ -281,7 +324,9 @@ async function captureAndRead() {
     const outcome = await recognizeCanvas(card);
     showScan(card, outcome);
     currentLogId = await ScanLog.record(card, logEntry(card, outcome));
-    $("scanStatus").textContent = "Tocca la carta giusta per aprirla.";
+    $("scanStatus").textContent = currentLogId === null && ScanLog.enabled()
+      ? `Lettura non salvata nel registro: ${ScanLog.lastError() || "errore sconosciuto"}`
+      : "Confronta con la tua foto, poi apri la carta giusta.";
     $("scanResult").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
     $("scanStatus").textContent = "Lettura non riuscita.";
@@ -479,6 +524,8 @@ async function renderCard(key) {
 // ---------- More ----------
 
 function renderMore() {
+  const standalone = window.matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  $("tabWarning").hidden = standalone;
   const list = $("binderList");
   list.innerHTML = "";
   const binders = Store.binders();
@@ -502,7 +549,7 @@ function renderMore() {
 
 async function shareOrDownload(file) {
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({ files: [file], title: "Scrinium" });
+    await navigator.share({ files: [file], title: "Holotheca" });
     return;
   }
   const link = el("a", { href: URL.createObjectURL(file), download: file.name });
@@ -514,6 +561,12 @@ async function shareOrDownload(file) {
 $("logToggle").addEventListener("change", (event) => ScanLog.setEnabled(event.target.checked));
 $("logExport").addEventListener("click", async () => {
   try {
+    if (!(await ScanLog.count())) {
+      $("logInfo").textContent = ScanLog.enabled()
+        ? "Il registro è vuoto: fai qualche lettura. Se resta vuoto, apri l'app dalla schermata Home e non da una scheda privata di Safari."
+        : "Il registro è vuoto: accendi \"Registra ogni lettura\" e fai qualche lettura.";
+      return;
+    }
     $("logInfo").textContent = "Preparo il file…";
     const file = await ScanLog.exportFile({ version: VERSION, catalogue: Catalogue.info(), user_agent: navigator.userAgent });
     await shareOrDownload(file);
@@ -537,7 +590,7 @@ $("binderAdd").addEventListener("click", () => {
 });
 
 $("exportBtn").addEventListener("click", async () => {
-  const name = `scrinium-${new Date().toISOString().slice(0, 10)}.json`;
+  const name = `holotheca-${new Date().toISOString().slice(0, 10)}.json`;
   const file = new File([Store.exportJson()], name, { type: "application/json" });
   try {
     await shareOrDownload(file);
@@ -598,7 +651,7 @@ Catalogue.load().then(() => {
 });
 
 // Hook used by automated checks.
-window.scriniumTest = {
+window.holothecaTest = {
   recognizeCanvas, showScan,
   log: async (canvas, outcome) => { currentLogId = await ScanLog.record(canvas, logEntry(canvas, outcome)); },
 };
