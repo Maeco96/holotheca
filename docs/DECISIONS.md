@@ -21,6 +21,7 @@ One row per decision. Newest last.
 | 2026-11-16 | The ETL infers a variant only when TCGdex lists none and the rarity is unambiguous: Common/Uncommon/Rare become `normal`, any "Holo" rarity becomes `holo`; rows are flagged `inferred` | Owner: "deduci al momento, poi vediamo". Reverse holos, 1st editions and stamps are never guessed; the app must show inferred variants as a guess. Revisit after real scans |
 | 2026-11-16 | PWA test on iPhone (iOS 27.2.1) passed: installs from the Home Screen, starts offline, camera 2160x3840; Safari does not expose focus control; web storage is not guaranteed persistent, so backups are mandatory | Real-device test |
 | 2026-11-16 | Route: PWA first with an OCR read test; the native app (SideInstaller + SideStore) only if browser OCR proves too weak | Owner's choice. No PC software needed; keeps zero cost |
+| 2026-11-16 | OCR test v0.3.0: wider strips, several number strips (bottom-left, bottom-right, full bottom), grayscale then black/white retry, coloured boxes drawn on the captured photo | First real read (sleeved Eevee, e-Reader era) returned nothing useful; the boxes show whether the crop or the image quality is at fault |
 
 ## Open
 
