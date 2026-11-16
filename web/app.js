@@ -139,6 +139,7 @@ async function renderCollection() {
 // ---------- Scan ----------
 
 let enginePromise = null;
+let currentLogId = null; // scan-log entry of the reading on screen
 
 function scanError(message) {
   $("scanError").textContent = message;
@@ -213,7 +214,7 @@ async function recognizeCanvas(canvas) {
   const height = result.resizedImageHeight || canvas.height;
   const reading = ScriniumRecognize.parse(result.texts, width, height);
   const candidates = index ? ScriniumRecognize.match(index, reading, 5) : [];
-  return { reading, candidates, readMs, catalogue: Boolean(index) };
+  return { reading, candidates, readMs, matchMs: 0, catalogue: Boolean(index) };
 }
 
 function showScan(canvas, outcome) {
@@ -235,7 +236,7 @@ function showScan(canvas, outcome) {
     const shown = { ...card, name: candidate.name || card.name };
     const percent = Math.round(candidate.score * 100);
     list.appendChild(
-      el("button", { class: i === 0 && confident ? "item best" : "item", onclick: () => { location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
+      el("button", { class: i === 0 && confident ? "item best" : "item", onclick: () => { ScanLog.choose(currentLogId, card.key); location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
         art(shown),
         el("div", { class: "grow" },
           el("div", { class: "t", text: shown.name }),
@@ -245,6 +246,9 @@ function showScan(canvas, outcome) {
     );
   });
   $("scanResult").hidden = false;
+  $("noneRight").hidden = !ScanLog.enabled();
+  $("noneRight").disabled = false;
+  $("noneRight").textContent = "Nessuna è quella giusta";
 
   // Details for troubleshooting: the photo with the text boxes and what was read.
   const target = $("cardCanvas");
@@ -275,6 +279,7 @@ async function captureAndRead() {
     $("scanStatus").textContent = "Leggo la carta…";
     const outcome = await recognizeCanvas(card);
     showScan(card, outcome);
+    currentLogId = await ScanLog.record(card, logEntry(card, outcome));
     $("scanStatus").textContent = "Tocca la carta giusta per aprirla.";
     $("scanResult").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
@@ -285,6 +290,35 @@ async function captureAndRead() {
     shutter.classList.remove("busy");
   }
 }
+
+/** What the log keeps about one reading, besides the photo. */
+function logEntry(canvas, outcome) {
+  const { reading, candidates } = outcome;
+  const round = (n) => Math.round(n * 10000) / 10000;
+  return {
+    version: VERSION,
+    camera: Camera.describe(),
+    width: canvas.width,
+    height: canvas.height,
+    source_width: canvas.sourceWidth ?? null,
+    sharpness: canvas.sharpness ?? null,
+    read_ms: outcome.readMs,
+    lines: reading.lines.map((l) => ({ text: l.text, confidence: round(l.confidence), x: round(l.x), y: round(l.y), w: round(l.w), h: round(l.h) })),
+    parsed: {
+      hp: reading.hp ?? null,
+      numbers: reading.numbers,
+      names: reading.nameCandidates.map((c) => c.text),
+      bottom: reading.bottomText ?? null,
+    },
+    candidates: candidates.map((c) => ({ key: `${c.setId}-${c.number}`, name: c.name, score: round(c.score), evidence: c.evidence })),
+  };
+}
+
+$("noneRight").addEventListener("click", () => {
+  ScanLog.choose(currentLogId, "none");
+  $("noneRight").disabled = true;
+  $("noneRight").textContent = "Segnato nel registro";
+});
 
 $("startCamera").addEventListener("click", startCamera);
 $("shutter").addEventListener("click", captureAndRead);
@@ -461,7 +495,37 @@ function renderMore() {
   const info = Catalogue.info();
   if (info) $("catalogueInfo").textContent = `${info.cards.toLocaleString("it-IT")} carte, ${info.sets} espansioni`;
   $("cameraInfo").textContent = Camera.describe();
+  $("logToggle").checked = ScanLog.enabled();
+  ScanLog.count().then((n) => { $("logInfo").textContent = n ? `${n} letture registrate.` : "Nessuna lettura registrata."; });
 }
+
+async function shareOrDownload(file) {
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    await navigator.share({ files: [file], title: "Scrinium" });
+    return;
+  }
+  const link = el("a", { href: URL.createObjectURL(file), download: file.name });
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+}
+
+$("logToggle").addEventListener("change", (event) => ScanLog.setEnabled(event.target.checked));
+$("logExport").addEventListener("click", async () => {
+  try {
+    $("logInfo").textContent = "Preparo il file…";
+    const file = await ScanLog.exportFile({ version: VERSION, catalogue: Catalogue.info(), user_agent: navigator.userAgent });
+    await shareOrDownload(file);
+    $("logInfo").textContent = `Esportato ${file.name} (${(file.size / 1048576).toFixed(1)} MB).`;
+  } catch (e) {
+    $("logInfo").textContent = e.name === "AbortError" ? "Esportazione annullata." : `Esportazione non riuscita: ${e.message}`;
+  }
+});
+$("logClear").addEventListener("click", async () => {
+  if (!confirm("Cancellare tutte le letture registrate?")) return;
+  await ScanLog.clear();
+  renderMore();
+});
 
 $("binderAdd").addEventListener("click", () => {
   const name = $("binderName").value.trim();
@@ -475,14 +539,7 @@ $("exportBtn").addEventListener("click", async () => {
   const name = `scrinium-${new Date().toISOString().slice(0, 10)}.json`;
   const file = new File([Store.exportJson()], name, { type: "application/json" });
   try {
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: "Scrinium" });
-    } else {
-      const link = el("a", { href: URL.createObjectURL(file), download: name });
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    }
+    await shareOrDownload(file);
     $("backupInfo").textContent = `Esportato ${name}.`;
   } catch (e) {
     if (e.name !== "AbortError") $("backupInfo").textContent = `Esportazione non riuscita: ${e.message}`;
@@ -540,6 +597,9 @@ Catalogue.load().then(() => {
 });
 
 // Hook used by automated checks.
-window.scriniumTest = { recognizeCanvas, showScan };
+window.scriniumTest = {
+  recognizeCanvas, showScan,
+  log: async (canvas, outcome) => { currentLogId = await ScanLog.record(canvas, logEntry(canvas, outcome)); },
+};
 
 route();

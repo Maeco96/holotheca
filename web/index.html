@@ -77,6 +77,7 @@
       <div id="scanResult" hidden>
         <h2 id="verdict"></h2>
         <div class="list" id="candidates" style="margin-top:12px"></div>
+        <button class="btn ghost block" id="noneRight" hidden style="margin-top:10px">Nessuna è quella giusta</button>
       </div>
 
       <details class="panel" id="camPanel" hidden>
@@ -124,6 +125,16 @@
           <button class="btn" id="binderAdd">Aggiungi</button>
         </div>
       </div>
+      <h2>Registro delle letture</h2>
+      <div class="panel">
+        <p class="muted small" style="margin-top:0">Serve a migliorare lo scanner: salva su questo telefono la foto letta, il testo trovato, le carte proposte e quella che scegli. Non viene inviato nulla: lo esporti tu.</p>
+        <label class="row"><input type="checkbox" id="logToggle"> <span class="grow">Registra ogni lettura</span></label>
+        <div class="row" style="margin-top:10px">
+          <button class="btn grow" id="logExport">Esporta registro</button>
+          <button class="btn ghost" id="logClear">Svuota</button>
+        </div>
+        <p class="small" id="logInfo" style="margin-bottom:0"></p>
+      </div>
       <h2>Stato</h2>
       <div class="attrs">
         <div class="attr"><span>Versione</span><span id="version"></span></div>
@@ -148,6 +159,7 @@
   <script src="catalogue.js" defer></script>
   <script src="store.js" defer></script>
   <script src="camera.js" defer></script>
+  <script src="scanlog.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>
