@@ -1,6 +1,6 @@
 // Phase 0 test page for the PWA route: camera, install, offline and an OCR read test.
 // Nothing is stored or uploaded; the captured frame stays in memory on the device.
-const VERSION = "0.4.0";
+const VERSION = "0.5.0";
 const $ = (id) => document.getElementById(id);
 
 // Card size in mm; the guide frame uses the same ratio.
@@ -10,17 +10,18 @@ const CARD_RATIO = 63 / 88;
 // Names sit top-left; the collector number and set code sit on the bottom strip.
 const NUMBER_WHITELIST = "0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ-";
 const REGIONS = {
-  // Name and HP share the top strip on every era; it is cut at the full card width.
-  name: { x: 0.0, y: 0.0, w: 1.0, h: 0.14, psm: "7", whitelist: "" },
+  // Name and HP sit on the top line on every era; they are read separately so the card edge
+  // and the energy symbol do not disturb the name.
+  name: { x: 0.08, y: 0.015, w: 0.55, h: 0.10, psm: "7", whitelist: "" },
+  hp: { x: 0.55, y: 0.015, w: 0.45, h: 0.10, psm: "7", whitelist: "0123456789HP " },
 };
 // The number sits bottom-left on modern cards and bottom-right on older ones, on a thin line
-// between other text. Thin overlapping strips (left and right halves) are read one by one and
-// the first NNN/NNN wins.
+// between other text. Narrow overlapping windows are read one by one, the first NNN/NNN wins.
 const NUMBER_REGIONS = [];
-for (let y = 0.84; y < 0.96; y += 0.015) {
-  for (const x of [0.0, 0.45]) {
-    const key = `n${y.toFixed(3)}_${x}`;
-    REGIONS[key] = { x, y, w: 0.55, h: 0.045, psm: "7", whitelist: NUMBER_WHITELIST };
+for (let y = 0.86; y < 0.955; y += 0.0125) {
+  for (const x of [0.0, 0.15, 0.3, 0.45, 0.6, 0.7]) {
+    const key = `n${y.toFixed(4)}_${x}`;
+    REGIONS[key] = { x, y, w: 0.3, h: 0.035, psm: "7", whitelist: NUMBER_WHITELIST };
     NUMBER_REGIONS.push(key);
   }
 }
@@ -133,8 +134,33 @@ function cropRegion(card, region) {
   return canvas;
 }
 
+/** Black/white by comparing each pixel with the mean of its neighbourhood (copes with glare gradients). */
+function adaptiveThreshold(d, w, h) {
+  const radius = Math.max(8, Math.round(h / 3));
+  const integral = new Float64Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      row += d[(y * w + x) * 4];
+      integral[(y + 1) * (w + 1) + x + 1] = integral[y * (w + 1) + x + 1] + row;
+    }
+  }
+  const out = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.max(0, y - radius), y1 = Math.min(h, y + radius + 1);
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.max(0, x - radius), x1 = Math.min(w, x + radius + 1);
+      const sum = integral[y1 * (w + 1) + x1] - integral[y0 * (w + 1) + x1]
+        - integral[y1 * (w + 1) + x0] + integral[y0 * (w + 1) + x0];
+      const mean = sum / ((x1 - x0) * (y1 - y0));
+      out[y * w + x] = d[(y * w + x) * 4] < mean * 0.9 ? 0 : 255;
+    }
+  }
+  for (let i = 0; i < out.length; i++) d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = out[i];
+}
+
 /** Grayscale, upscale small strips and stretch contrast between the 2nd and 98th percentile. */
-function preprocess(source, minHeight = 120, binarize = false) {
+function preprocess(source, minHeight = 140, binarize = false) {
   const scale = Math.max(1, minHeight / source.height);
   const canvas = document.createElement("canvas");
   canvas.width = Math.round(source.width * scale);
@@ -167,10 +193,10 @@ function preprocess(source, minHeight = 120, binarize = false) {
   const span = Math.max(1, high - low);
   for (let i = 0; i < d.length; i += 4) {
     const gray = Math.max(0, Math.min(255, (((d[i] - low) * 255) / span) | 0));
-    const out = binarize ? (gray > 127 ? 255 : 0) : gray;
-    d[i] = d[i + 1] = d[i + 2] = out;
+    d[i] = d[i + 1] = d[i + 2] = gray;
     d[i + 3] = 255;
   }
+  if (binarize) adaptiveThreshold(d, canvas.width, canvas.height);
   ctx.putImageData(image, 0, 0);
   return canvas;
 }
@@ -213,7 +239,7 @@ async function readCanvas(canvas, regionName, binarize = false) {
     tessedit_pageseg_mode: region.psm,
     tessedit_char_whitelist: region.whitelist,
   });
-  const prepared = preprocess(canvas, 120, binarize);
+  const prepared = preprocess(canvas, 140, binarize);
   const t0 = performance.now();
   const { data } = await worker.recognize(prepared);
   const ms = Math.round(performance.now() - t0);
@@ -242,6 +268,7 @@ function outlineRegions() {
   ctx.lineWidth = Math.max(4, canvas.width / 250);
   const boxes = [
     ["#00e0ff", REGIONS.name],
+    ["#ff4dd2", REGIONS.hp],
     ["#7dff7d", { x: 0, y: 0.84, w: 1, h: 0.16 }],
   ];
   for (const [color, r] of boxes) {
@@ -262,17 +289,20 @@ async function captureAndRead() {
     $("ocrStatus").textContent = "Reading…";
     outlineRegions();
 
-    // Name: grayscale and black/white attempts, keep the more confident one.
-    const nameCrop = cropRegion(card, REGIONS.name);
-    const nameTries = [await readCanvas(nameCrop, "name", false), await readCanvas(nameCrop, "name", true)];
-    const name = nameTries.reduce((best, t) => (t.confidence > best.confidence ? t : best));
+    // Name and HP: grayscale and black/white attempts, keep the more confident one.
+    const best = async (regionName) => {
+      const crop = cropRegion(card, REGIONS[regionName]);
+      const tries = [await readCanvas(crop, regionName, false), await readCanvas(crop, regionName, true)];
+      return tries.reduce((top, t) => (t.confidence > top.confidence ? t : top));
+    };
+    const name = await best("name");
+    const hpRead = await best("hp");
     draw("nameCanvas", name.prepared);
-    const hp = (name.text.match(/HP\s*(\d{2,3})/i) || name.text.match(/(\d{2,3})\s*HP/i) || [])[1];
-    const nameOnly = name.text.replace(/\s*(HP\s*)?\d{2,3}.*$/i, "").replace(/[^\p{L}\p{N}' .:-]+$/u, "").trim();
-    $("nameOut").textContent = `name: ${nameOnly || name.text || "(nothing read)"}${hp ? `\nHP: ${hp}` : ""}`;
+    const hp = (hpRead.text.match(/(\d{2,3})/) || [])[1];
+    const nameOnly = name.text.replace(/[^\p{L}\p{N}' .:-]+/gu, " ").replace(/\s+/g, " ").trim();
+    $("nameOut").textContent = `name: ${nameOnly || "(nothing read)"}\nHP: ${hp || "(nothing read)"}  [${hpRead.text || "-"}]`;
     $("nameOut").style.whiteSpace = "pre-wrap";
-    $("nameMeta").textContent =
-      `confidence ${name.confidence}% · ${nameTries.map((t) => t.ms).join("+")} ms`;
+    $("nameMeta").textContent = `confidence name ${name.confidence}% · HP ${hpRead.confidence}%`;
 
     // Number: each strip, grayscale then black/white, stop at the first NNN/NNN.
     const attempts = [];
@@ -281,7 +311,7 @@ async function captureAndRead() {
       const crop = cropRegion(card, REGIONS[regionName]);
       for (const binarize of [false, true]) {
         const r = await readCanvas(crop, regionName, binarize);
-        attempts.push(`${regionName.slice(1)}${binarize ? " bw" : ""}: ${r.text || "-"}`);
+        if (r.text) attempts.push(`${regionName.slice(1)}${binarize ? " bw" : ""}: ${r.text}`);
         if (r.number && !found) found = { ...r, regionName };
         if (found) break;
       }
@@ -291,7 +321,7 @@ async function captureAndRead() {
     draw("numberCanvas", shown.prepared);
     $("numberOut").innerHTML = "";
     const line = document.createElement("div");
-    line.textContent = attempts.join("\n");
+    line.textContent = `${attempts.length} reads with text; last: \n` + attempts.slice(-10).join("\n");
     line.style.whiteSpace = "pre-wrap";
     $("numberOut").appendChild(line);
     if (found) {
