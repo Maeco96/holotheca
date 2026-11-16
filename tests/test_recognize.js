@@ -87,6 +87,25 @@ test("card without a printed total: set code plus bare number", () => {
   assert.strictEqual(`${candidates[0].setId}-${candidates[0].number}`, "sve-001");
 });
 
+test("evolves-from line and near-miss numbers do not promote the wrong card", () => {
+  const small = R.prepareIndex({
+    names: ["Gothitelle", "Gothorita"],
+    illustrators: [],
+    sets: [["sv02", "PAL", 193, "Paldea Evolved", "2023-06-09", ["it"]]],
+    cards: [[0, "092", 150, [0], -1], [0, "091", 90, [1], -1]],
+  });
+  const reading = R.parse([
+    line("FASE2 150", 60, 60),
+    line("Gothitelle", 250, 70),
+    line("Sievolve da Gothorita", 250, 130),
+    line("GPALI 092/193", 60, 1300),
+  ], W, H);
+  const candidates = R.match(small, reading, 5);
+  // Gothorita is only named by the evolves-from line, so it is not proposed at all.
+  assert.deepStrictEqual(candidates.map((c) => c.number), ["092"]);
+  assert.deepStrictEqual(candidates[0].evidence, ["name", "number/total", "hp", "set code"]);
+});
+
 test("nothing readable gives no candidates", () => {
   const { candidates } = best([line("~~", 60, 60), line("xx", 60, 1300)]);
   assert.deepStrictEqual(candidates, []);

@@ -1,264 +1,182 @@
-// Scanner test page: camera, text reading (PaddleOCR, on the phone) and catalogue matching.
-// Nothing is stored or uploaded; the captured frame stays in memory on the device.
-const VERSION = "0.7.0";
+// Scrinium app shell: views, navigation and the scan flow.
+// Reading runs on the device; the collection stays in the browser's storage (see store.js).
+const VERSION = "0.8.0";
 const $ = (id) => document.getElementById(id);
 
-const OCR_MAX_WIDTH = 1280; // captured card is scaled down to this width before reading
-const FRAME_MARGIN = 0.03; // extra area captured around the guide frame, as a share of its size
+const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
+const LANG_LABELS = {
+  it: "Italiano", en: "Inglese", fr: "Francese", de: "Tedesco", es: "Spagnolo", pt: "Portoghese",
+  "pt-br": "Portoghese (BR)", ja: "Giapponese", ko: "Coreano", "zh-tw": "Cinese trad.", "zh-cn": "Cinese sempl.",
+  th: "Thai", id: "Indonesiano", nl: "Olandese", pl: "Polacco", ru: "Russo",
+};
+const CONDITIONS = ["MT", "NM", "EX", "GD", "LP", "PL", "PO"];
+const EVIDENCE_LABELS = {
+  name: "nome", "name~": "nome (simile)", "number/total": "numero", "number/total~": "numero (ricostruito)",
+  "number/total~~": "numero (incerto)", number: "numero", total: "totale espansione", "total~": "totale (incerto)",
+  hp: "PS", "set code": "codice espansione", illustrator: "illustratore",
+};
 
-$("version").textContent = VERSION;
-$("standalone").textContent =
-  window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches
-    ? "yes"
-    : "no (open the Share menu > Add to Home Screen)";
-
-function showError(message) {
-  const el = $("error");
-  el.textContent = message;
-  el.hidden = false;
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs)) {
+    if (value === null || value === undefined || value === false) continue;
+    if (key === "class") node.className = value;
+    else if (key === "text") node.textContent = value;
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? "" : value);
+  }
+  for (const child of children.flat()) {
+    if (child === null || child === undefined || child === false) continue;
+    node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
+  }
+  return node;
 }
 
 function absolute(path) {
   return new URL(path, document.baseURI).href;
 }
 
-// Offline support: the service worker caches the app shell, the OCR files and the card index.
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker
-    .register("sw.js")
-    .then(() => navigator.serviceWorker.ready)
-    .then(() => { $("offline").textContent = "app shell yes; OCR files and card index after the first read"; })
-    .catch((e) => { $("offline").textContent = "no (" + e.message + ")"; });
-} else {
-  $("offline").textContent = "not supported";
+function euro(value) {
+  return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }
 
-// Persistent storage: iOS may clear web storage under pressure, so keep exports.
-(async () => {
-  try {
-    const persisted = navigator.storage && navigator.storage.persisted
-      ? await navigator.storage.persisted() : null;
-    $("storage").textContent =
-      persisted === null ? "unknown" : persisted ? "persistent" : "not guaranteed persistent (keep backups)";
-  } catch (e) {
-    $("storage").textContent = "unknown";
+function formatDate(iso) {
+  if (!iso) return null;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" });
+}
+
+/** Card artwork that tries each image address in turn and falls back to the card name. */
+function art(card, { big = false, quality = "low" } = {}) {
+  const box = el("div", { class: big ? "art big" : "art" });
+  const placeholder = el("div", { class: "ph", text: card ? card.name : "?" });
+  box.appendChild(placeholder);
+  if (!card) return box;
+  const urls = Catalogue.imageUrls(card, quality);
+  let attempt = 0;
+  const img = el("img", { alt: card.name, loading: "lazy", decoding: "async" });
+  img.addEventListener("load", () => { placeholder.remove(); box.appendChild(img); });
+  img.addEventListener("error", () => {
+    attempt += 1;
+    if (attempt < urls.length) img.src = urls[attempt];
+  });
+  if (urls.length) img.src = urls[0];
+  return box;
+}
+
+function cardLine(card) {
+  const total = card.set.official ? `/${card.set.official}` : "";
+  return `${card.set.name} · ${card.number}${total}`;
+}
+
+// ---------- Navigation ----------
+
+const VIEWS = { scrigno: "view-scrigno", scan: "view-scan", search: "view-search", more: "view-more", card: "view-card" };
+const ROUTES = { scrigno: "scrigno", scan: "scan", cerca: "search", altro: "more", carta: "card" };
+let cameraWanted = false;
+
+function route() {
+  const [, name = "scrigno", ...rest] = location.hash.split("/");
+  const view = ROUTES[name] || "scrigno";
+  const argument = decodeURIComponent(rest.join("/"));
+  for (const [key, id] of Object.entries(VIEWS)) $(id).hidden = key !== view;
+  document.querySelectorAll(".tabbar a").forEach((a) => a.classList.toggle("on", a.dataset.tab === view));
+  const isCard = view === "card";
+  $("back").hidden = !isCard;
+  $("wordmark").hidden = isCard;
+  $("title").hidden = !isCard;
+  $("error") && ($("error").hidden = true);
+
+  if (view !== "scan" && Camera.running()) Camera.stop();
+  if (view === "scrigno") renderCollection();
+  if (view === "scan") enterScan();
+  if (view === "search") $("searchInput").focus({ preventScroll: true });
+  if (view === "more") renderMore();
+  if (view === "card") renderCard(argument);
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener("hashchange", route);
+$("back").addEventListener("click", () => (history.length > 1 ? history.back() : (location.hash = "#/scrigno")));
+
+// ---------- Scrigno ----------
+
+let selectedBinder = null;
+
+async function renderCollection() {
+  await Catalogue.load();
+  const stats = Store.stats(selectedBinder);
+  $("statTotal").textContent = stats.total;
+  $("statDistinct").textContent = stats.distinct;
+  $("statSpent").textContent = stats.spent ? euro(stats.spent) : "–";
+
+  const chips = $("binderChips");
+  chips.innerHTML = "";
+  const chip = (label, id) =>
+    el("button", { class: selectedBinder === id ? "chip on" : "chip", text: label, onclick: () => { selectedBinder = id; renderCollection(); } });
+  chips.appendChild(chip("Tutte", null));
+  for (const binder of Store.binders()) chips.appendChild(chip(binder.name, binder.id));
+
+  const byCard = new Map();
+  for (const copy of Store.copies(selectedBinder)) {
+    byCard.set(copy.card_source_id, (byCard.get(copy.card_source_id) || 0) + copy.quantity);
   }
-})();
-
-// ---------- Camera ----------
-
-let stream = null;
-let track = null;
-let torchOn = false;
-let lensChosenByUser = false;
-
-async function applyAdvanced(constraint) {
-  try {
-    await track.applyConstraints({ advanced: [constraint] });
-    return true;
-  } catch (e) {
-    showError(`${Object.keys(constraint)[0]}: ${e.name} ${e.message}`);
-    return false;
+  const grid = $("collectionGrid");
+  grid.innerHTML = "";
+  const keys = [...byCard.keys()].reverse(); // newest additions first
+  for (const key of keys) {
+    const card = Catalogue.cardByKey(key);
+    grid.appendChild(
+      el("button", { class: "tile", onclick: () => { location.hash = `#/carta/${encodeURIComponent(key)}`; } },
+        art(card),
+        byCard.get(key) > 1 ? el("span", { class: "qty", text: String(byCard.get(key)) }) : null,
+        el("div", { class: "cap", text: card ? card.name : key }))
+    );
   }
+  $("collectionEmpty").hidden = keys.length > 0;
 }
 
-/**
- * Picks the plain wide back camera when the phone lists several. The combined "dual" or
- * "triple" cameras switch lens on their own when the card is close, which changes the picture
- * mid-scan; ultra wide and telephoto are worse for a card at arm's length.
- */
-function preferredLens(devices) {
-  const back = devices.filter((d) => !/front|anteriore|frontale|facetime|user/i.test(d.label));
-  const plain = back.filter(
-    (d) => d.label && !/ultra|tele|dual|doppia|triple|tripla|wide|grandangol|macro|lidar|depth|profondit/i.test(d.label)
-  );
-  return plain.length === 1 ? plain[0] : null;
-}
-
-/** Shows only the controls this browser actually exposes for the running camera track. */
-async function setupControls() {
-  const caps = track.getCapabilities ? track.getCapabilities() : {};
-  let s = track.getSettings();
-  $("controls").hidden = false;
-
-  if (caps.zoom && typeof caps.zoom.max === "number") {
-    const z = $("zoom");
-    z.min = caps.zoom.min; z.max = Math.min(caps.zoom.max, 6); z.step = caps.zoom.step || 0.1;
-    // A little zoom lets the phone stay about 20 cm away, where the main lens focuses well.
-    const wanted = Math.min(Math.max(2, caps.zoom.min), caps.zoom.max);
-    if (!s.zoom || s.zoom < wanted) {
-      await applyAdvanced({ zoom: wanted });
-      s = track.getSettings();
-    }
-    z.value = s.zoom || wanted;
-    $("zoomVal").textContent = Number(z.value).toFixed(1) + "x";
-    $("zoomRow").hidden = false;
-    z.oninput = async () => {
-      $("zoomVal").textContent = Number(z.value).toFixed(1) + "x";
-      await applyAdvanced({ zoom: Number(z.value) });
-    };
-  } else {
-    $("zoomRow").hidden = true;
-  }
-
-  if (caps.focusMode && caps.focusMode.length) {
-    const f = $("focus");
-    f.innerHTML = "";
-    for (const mode of caps.focusMode) f.add(new Option(mode, mode));
-    if (caps.focusMode.includes("continuous") && s.focusMode !== "continuous") {
-      await applyAdvanced({ focusMode: "continuous" });
-    }
-    f.value = track.getSettings().focusMode || caps.focusMode[0];
-    f.onchange = () => applyAdvanced({ focusMode: f.value });
-    $("focusRow").hidden = false;
-  } else {
-    $("focusRow").hidden = true;
-  }
-
-  if ("torch" in caps) {
-    torchOn = false;
-    $("torch").textContent = "Torch (flash light): off";
-    $("torch").hidden = false;
-    $("torch").onclick = async () => {
-      if (await applyAdvanced({ torch: !torchOn })) {
-        torchOn = !torchOn;
-        $("torch").textContent = `Torch (flash light): ${torchOn ? "on" : "off"}`;
-      }
-    };
-  } else {
-    $("torch").hidden = true;
-  }
-
-  const exposed = Object.keys(caps).sort().join(", ") || "none";
-  const zoom = s.zoom ? `, zoom ${Number(s.zoom).toFixed(1)}x` : "";
-  $("camera").textContent =
-    `${s.width}x${s.height}${zoom}, ${track.label || "camera"}; exposed controls: ${exposed}`;
-}
-
-async function openStream(deviceId) {
-  if (stream) stream.getTracks().forEach((t) => t.stop());
-  const video = {
-    width: { ideal: 3840 },
-    height: { ideal: 2160 },
-    ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: "environment" } }),
-  };
-  stream = await navigator.mediaDevices.getUserMedia({ audio: false, video });
-  const el = $("video");
-  el.srcObject = stream;
-  await el.play();
-  track = stream.getVideoTracks()[0];
-}
-
-async function startCamera(deviceId) {
-  $("start").disabled = true;
-  $("error").hidden = true;
-  try {
-    await openStream(deviceId);
-    // Labels and the full lens list only appear once the camera permission is granted.
-    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === "videoinput");
-    if (!deviceId && !lensChosenByUser) {
-      const better = preferredLens(devices);
-      if (better && better.deviceId !== track.getSettings().deviceId) await openStream(better.deviceId);
-    }
-    const lens = $("lens");
-    lens.innerHTML = "";
-    for (const d of devices) lens.add(new Option(d.label || "camera", d.deviceId));
-    lens.value = track.getSettings().deviceId || "";
-    lens.onchange = () => { lensChosenByUser = true; startCamera(lens.value); };
-    await setupControls();
-    $("start").textContent = "Camera running";
-    $("read").disabled = false;
-  } catch (e) {
-    $("camera").textContent = "failed";
-    showError(`${e.name}: ${e.message}`);
-    $("start").disabled = false;
-  }
-}
-
-// ---------- Capture ----------
-
-/** Guide frame rectangle (plus a small margin) in video pixels; accounts for object-fit: cover. */
-function frameRectInVideo() {
-  const video = $("video");
-  const vr = video.getBoundingClientRect();
-  const fr = $("frame").getBoundingClientRect();
-  const vw = video.videoWidth;
-  const vh = video.videoHeight;
-  const scale = Math.max(vr.width / vw, vr.height / vh);
-  const offsetX = (vr.width - vw * scale) / 2;
-  const offsetY = (vr.height - vh * scale) / 2;
-  const mx = fr.width * FRAME_MARGIN;
-  const my = fr.height * FRAME_MARGIN;
-  const x0 = Math.max(0, (fr.left - mx - vr.left - offsetX) / scale);
-  const y0 = Math.max(0, (fr.top - my - vr.top - offsetY) / scale);
-  const x1 = Math.min(vw, (fr.right + mx - vr.left - offsetX) / scale);
-  const y1 = Math.min(vh, (fr.bottom + my - vr.top - offsetY) / scale);
-  return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
-}
-
-function grabFrame() {
-  const video = $("video");
-  const r = frameRectInVideo();
-  const scale = Math.min(1, OCR_MAX_WIDTH / r.w);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(r.w * scale);
-  canvas.height = Math.round(r.h * scale);
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
-  canvas.sourceWidth = Math.round(r.w);
-  return canvas;
-}
-
-/** Sharpness as the mean squared difference between neighbouring pixels of a small grey copy. */
-function sharpness(canvas) {
-  const w = 256;
-  const h = Math.round((canvas.height / canvas.width) * w);
-  const small = document.createElement("canvas");
-  small.width = w;
-  small.height = h;
-  const ctx = small.getContext("2d", { willReadFrequently: true });
-  ctx.drawImage(canvas, 0, 0, w, h);
-  const d = ctx.getImageData(0, 0, w, h).data;
-  let sum = 0;
-  for (let y = 0; y < h - 1; y++) {
-    for (let x = 0; x < w - 1; x++) {
-      const i = (y * w + x) * 4;
-      const g = d[i] + d[i + 1] + d[i + 2];
-      const right = d[i + 4] + d[i + 5] + d[i + 6];
-      const below = d[i + w * 4] + d[i + w * 4 + 1] + d[i + w * 4 + 2];
-      sum += (g - right) * (g - right) + (g - below) * (g - below);
-    }
-  }
-  return sum / (w * h);
-}
-
-/** Takes a few frames a moment apart and keeps the sharpest: hands shake and focus hunts. */
-async function captureSharpest(count = 5, gapMs = 110) {
-  let best = null;
-  let bestScore = -1;
-  for (let i = 0; i < count; i++) {
-    const frame = grabFrame();
-    const score = sharpness(frame);
-    if (score > bestScore) { best = frame; bestScore = score; }
-    if (i < count - 1) await new Promise((resolve) => setTimeout(resolve, gapMs));
-  }
-  best.sharpness = Math.round(bestScore);
-  return best;
-}
-
-// ---------- Text reading and catalogue ----------
+// ---------- Scan ----------
 
 let enginePromise = null;
-let indexPromise = null;
+
+function scanError(message) {
+  $("scanError").textContent = message;
+  $("scanError").hidden = !message;
+}
+
+Camera.bind({
+  video: $("video"), frame: $("frame"), lens: $("lens"), zoom: $("zoom"),
+  zoomValue: $("zoomVal"), zoomRow: $("zoomRow"), torch: $("torch"), onError: scanError,
+});
+
+async function startCamera() {
+  scanError("");
+  $("startCamera").hidden = true;
+  try {
+    await Camera.start();
+    cameraWanted = true;
+    $("shutter").disabled = false;
+    $("camPanel").hidden = false;
+    $("cameraInfo").textContent = Camera.describe();
+  } catch (e) {
+    $("startCamera").hidden = false;
+    $("shutter").disabled = true;
+    scanError(e.name === "NotAllowedError" ? "Permesso fotocamera negato: abilitalo nelle impostazioni di Safari." : `${e.name}: ${e.message}`);
+  }
+}
+
+function enterScan() {
+  // Once the owner has started the camera, coming back to this tab restarts it.
+  if (cameraWanted && !Camera.running()) startCamera();
+}
 
 function loadScript(src) {
   return new Promise((resolve, reject) => {
-    const el = document.createElement("script");
-    el.src = src;
-    el.onload = resolve;
-    el.onerror = () => reject(new Error(`could not load ${src}`));
-    document.head.appendChild(el);
+    const node = el("script", { src });
+    node.onload = resolve;
+    node.onerror = () => reject(new Error(`impossibile caricare ${src}`));
+    document.head.appendChild(node);
   });
 }
 
@@ -266,7 +184,7 @@ function loadScript(src) {
 function getEngine() {
   if (!enginePromise) {
     enginePromise = (async () => {
-      $("ocrStatus").textContent = "Loading the reader (about 40 MB the first time)…";
+      $("scanStatus").textContent = "Carico il lettore (circa 40 MB la prima volta)…";
       await loadScript(absolute("vendor/ppocr/ppocr.js"));
       const { Ocr, ort } = window.ScriniumOcr;
       ort.env.wasm.wasmPaths = absolute("vendor/ppocr/");
@@ -283,30 +201,9 @@ function getEngine() {
   return enginePromise;
 }
 
-/** Loads the card index built from the catalogue. Missing index: reading still works, matching does not. */
-function getIndex() {
-  if (!indexPromise) {
-    indexPromise = fetch(absolute("data/scan-index.json"))
-      .then((response) => {
-        if (!response.ok) throw new Error(`card index: HTTP ${response.status}`);
-        return response.json();
-      })
-      .then((raw) => {
-        $("catalogue").textContent =
-          `${raw.cards.length} cards, ${raw.sets.length} sets (TCGdex ${String(raw.tcgdex_revision || "?").slice(0, 8)})`;
-        return ScriniumRecognize.prepareIndex(raw);
-      })
-      .catch((e) => {
-        $("catalogue").textContent = `not available (${e.message})`;
-        return null;
-      });
-  }
-  return indexPromise;
-}
-
 /** Reads every text line on the card image and ranks catalogue cards against it. */
 async function recognizeCanvas(canvas) {
-  const [engine, index] = await Promise.all([getEngine(), getIndex()]);
+  const [engine, index] = await Promise.all([getEngine(), Catalogue.load()]);
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const t0 = performance.now();
@@ -315,94 +212,334 @@ async function recognizeCanvas(canvas) {
   const width = result.resizedImageWidth || canvas.width;
   const height = result.resizedImageHeight || canvas.height;
   const reading = ScriniumRecognize.parse(result.texts, width, height);
-  const t1 = performance.now();
   const candidates = index ? ScriniumRecognize.match(index, reading, 5) : [];
-  return { reading, candidates, readMs, matchMs: Math.round(performance.now() - t1), width, height };
+  return { reading, candidates, readMs, catalogue: Boolean(index) };
 }
 
-// ---------- Result display ----------
+function showScan(canvas, outcome) {
+  const { reading, candidates } = outcome;
+  const best = candidates[0];
+  const second = candidates[1];
+  const confident = best && best.score >= 0.75 && (!second || best.score - second.score >= 0.15);
+  $("verdict").textContent = !outcome.catalogue
+    ? "Catalogo non disponibile"
+    : !best ? "Carta non riconosciuta" : confident ? "Trovata" : "Quale di queste?";
 
-function drawResult(canvas, outcome) {
+  const list = $("candidates");
+  list.innerHTML = "";
+  if (!best) {
+    list.appendChild(el("p", { class: "muted", text: "Riprova con più luce e la carta ben dentro la cornice, oppure cercala per nome." }));
+  }
+  candidates.forEach((candidate, i) => {
+    const card = Catalogue.card(candidate.cardIndex);
+    const shown = { ...card, name: candidate.name || card.name };
+    const percent = Math.round(candidate.score * 100);
+    list.appendChild(
+      el("button", { class: i === 0 && confident ? "item best" : "item", onclick: () => { location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
+        art(shown),
+        el("div", { class: "grow" },
+          el("div", { class: "t", text: shown.name }),
+          el("div", { class: "s", text: cardLine(card) }),
+          el("div", { class: "s", text: `Letto: ${candidate.evidence.map((e) => EVIDENCE_LABELS[e] || e).join(", ") || "nulla"}` })),
+        el("span", { class: percent >= 75 ? "badge good" : "badge warn", text: `${percent}%` }))
+    );
+  });
+  $("scanResult").hidden = false;
+
+  // Details for troubleshooting: the photo with the text boxes and what was read.
   const target = $("cardCanvas");
   target.width = canvas.width;
   target.height = canvas.height;
   const ctx = target.getContext("2d");
   ctx.drawImage(canvas, 0, 0);
   ctx.lineWidth = Math.max(2, canvas.width / 400);
-  ctx.strokeStyle = "#00e0ff";
-  for (const line of outcome.reading.lines) {
+  ctx.strokeStyle = "#d6aa5a";
+  for (const line of reading.lines) {
     ctx.strokeRect(line.x * canvas.width, line.y * canvas.height, line.w * canvas.width, line.h * canvas.height);
   }
-}
-
-function element(tag, className, text) {
-  const el = document.createElement(tag);
-  if (className) el.className = className;
-  if (text !== undefined) el.textContent = text;
-  return el;
-}
-
-function showOutcome(canvas, outcome) {
-  drawResult(canvas, outcome);
-  const { reading, candidates } = outcome;
-  $("cardMeta").textContent =
-    `Read at ${canvas.width}x${canvas.height} px (camera area ${canvas.sourceWidth || canvas.width} px wide, ` +
-    `sharpness ${canvas.sharpness ?? "n/a"}) · reading ${outcome.readMs} ms · matching ${outcome.matchMs} ms`;
-
-  const numbers = reading.numbers.map((n) => `${n.number}/${n.total}`).join(", ");
-  const loose = reading.looseNumbers.join(", ");
   $("readingOut").textContent =
-    `top lines: ${reading.nameCandidates.map((c) => c.text).join(" | ") || "(none)"}\n` +
-    `HP: ${reading.hp ?? "(none)"}\n` +
-    `number: ${numbers || "(none)"}${loose ? `  bare: ${loose}` : ""}\n` +
-    `bottom text: ${reading.bottomText || "(none)"}`;
-
-  const list = $("candidates");
-  list.innerHTML = "";
-  if (!candidates.length) {
-    list.appendChild(element("li", "note", "No catalogue card matches this reading."));
-  }
-  candidates.forEach((c, i) => {
-    const li = element("li", i === 0 ? "candidate best" : "candidate");
-    li.appendChild(element("div", "title", `${c.name}  ·  ${c.number}/${c.official ?? "?"}`));
-    li.appendChild(element("div", "meta",
-      `${c.setName} (${c.setCode || c.setId})${c.hp ? ` · HP ${c.hp}` : ""} · score ${Math.round(c.score * 100)}%`));
-    li.appendChild(element("div", "meta", `matched on: ${c.evidence.join(", ") || "nothing"}`));
-    list.appendChild(li);
-  });
-  const best = candidates[0];
-  const second = candidates[1];
-  $("verdict").textContent = !best
-    ? "Not recognised."
-    : best.score >= 0.75 && (!second || best.score - second.score >= 0.15)
-      ? "Confident match. Check it is the right card."
-      : "Unsure: pick the right card from the list, or read again.";
-
-  $("allLines").textContent = reading.lines
-    .map((line) => `${line.text}  (${Math.round(line.confidence * 100)}%)`)
-    .join("\n");
+    `${canvas.width}x${canvas.height} px, nitidezza ${canvas.sharpness ?? "n/d"}, lettura ${outcome.readMs} ms\n` +
+    `PS: ${reading.hp ?? "-"}   numero: ${reading.numbers.map((n) => `${n.number}/${n.total}`).join(", ") || "-"}\n\n` +
+    reading.lines.map((line) => `${line.text}  (${Math.round(line.confidence * 100)}%)`).join("\n");
+  $("readPanel").hidden = false;
 }
 
 async function captureAndRead() {
-  $("read").disabled = true;
-  $("error").hidden = true;
+  const shutter = $("shutter");
+  shutter.disabled = true;
+  shutter.classList.add("busy");
+  scanError("");
   try {
-    $("ocrStatus").textContent = "Capturing…";
-    const card = await captureSharpest();
-    $("ocrStatus").textContent = "Reading…";
+    $("scanStatus").textContent = "Scatto…";
+    const card = await Camera.captureSharpest();
+    $("scanStatus").textContent = "Leggo la carta…";
     const outcome = await recognizeCanvas(card);
-    showOutcome(card, outcome);
-    $("ocrStatus").textContent = "Done.";
+    showScan(card, outcome);
+    $("scanStatus").textContent = "Tocca la carta giusta per aprirla.";
+    $("scanResult").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
-    $("ocrStatus").textContent = "Failed";
-    showError(`${e.name}: ${e.message}`);
+    $("scanStatus").textContent = "Lettura non riuscita.";
+    scanError(`${e.name}: ${e.message}`);
   } finally {
-    $("read").disabled = false;
+    shutter.disabled = !Camera.running();
+    shutter.classList.remove("busy");
   }
 }
 
-$("start").addEventListener("click", () => startCamera());
-$("read").addEventListener("click", captureAndRead);
+$("startCamera").addEventListener("click", startCamera);
+$("shutter").addEventListener("click", captureAndRead);
+
+// ---------- Search ----------
+
+let searchTimer = null;
+
+async function runSearch() {
+  await Catalogue.load();
+  const text = $("searchInput").value.trim();
+  const results = Catalogue.search(text);
+  const list = $("searchResults");
+  list.innerHTML = "";
+  $("searchInfo").textContent = !Catalogue.prepared()
+    ? "Catalogo non disponibile: serve la rete al primo avvio."
+    : text.length < 2 ? "Cerca in tutte le lingue del catalogo."
+    : results.length ? `${results.length}${results.length === 60 ? "+" : ""} carte, le più recenti per prime`
+    : "Nessuna carta trovata.";
+  for (const card of results) {
+    list.appendChild(
+      el("button", { class: "item", onclick: () => { location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
+        art(card),
+        el("div", { class: "grow" },
+          el("div", { class: "t", text: card.name }),
+          el("div", { class: "s", text: cardLine(card) }),
+          card.rarity ? el("div", { class: "s", text: card.rarity }) : null))
+    );
+  }
+}
+
+$("searchInput").addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(runSearch, 180);
+});
+
+// ---------- Card page ----------
+
+function select(options, value) {
+  const node = el("select");
+  for (const [optionValue, label] of options) node.add(new Option(label, optionValue));
+  if (value !== undefined && value !== null) node.value = value;
+  return node;
+}
+
+function ownedPanel(card) {
+  const copies = Store.copiesOf(card.key);
+  const panel = el("div", { class: "panel" });
+  if (!copies.length) {
+    panel.appendChild(el("div", { class: "muted", text: "Non è ancora nel tuo scrigno." }));
+    return panel;
+  }
+  const binderName = (id) => (Store.binders().find((b) => b.id === id) || {}).name;
+  for (const copy of copies) {
+    const details = [
+      VARIANT_LABELS[copy.variant_type] || copy.variant_type,
+      LANG_LABELS[copy.lang] || copy.lang,
+      copy.condition,
+      binderName(copy.binder_id),
+      copy.purchase_price != null ? euro(copy.purchase_price) : null,
+    ].filter(Boolean).join(" · ");
+    panel.appendChild(
+      el("div", { class: "copy" },
+        el("div", { class: "grow" }, el("div", { text: details }), copy.notes ? el("div", { class: "s muted small", text: copy.notes }) : null),
+        el("div", { class: "stepper" },
+          el("button", { text: "−", "aria-label": "Togli una copia", onclick: () => { Store.changeQuantity(copy.id, -1); renderCard(card.key); } }),
+          el("b", { text: String(copy.quantity) }),
+          el("button", { text: "+", "aria-label": "Aggiungi una copia", onclick: () => { Store.changeQuantity(copy.id, 1); renderCard(card.key); } })))
+    );
+  }
+  return panel;
+}
+
+function addPanel(card) {
+  const kinds = [...new Set([...card.variants, "normal", "holo", "reverse"])];
+  const variant = select(kinds.map((k) => [k, VARIANT_LABELS[k] || k]), card.variants[0] || "normal");
+  const langs = card.set.langs.length ? card.set.langs : ["it", "en"];
+  const lang = select(langs.map((l) => [l, LANG_LABELS[l] || l]), langs.includes("it") ? "it" : langs[0]);
+  const condition = select([["", "Non indicata"], ...CONDITIONS.map((c) => [c, c])], "NM");
+  const binder = select([["", "Nessuno"], ...Store.binders().map((b) => [String(b.id), b.name])], selectedBinder ? String(selectedBinder) : "");
+  const price = el("input", { type: "number", inputmode: "decimal", min: "0", step: "0.01", placeholder: "facoltativo" });
+  const notes = el("input", { type: "text", maxlength: "200", placeholder: "facoltative" });
+  const variantHint = card.variants.length
+    ? card.variantsInferred ? "Variante dedotta dalla rarità: controlla la carta." : "Controlla la variante sulla carta."
+    : "Il catalogo non indica le varianti di questa carta: scegli tu.";
+
+  const add = () => {
+    const paid = price.value === "" ? null : Number(price.value);
+    Store.addCopy({
+      card_source_id: card.key,
+      lang: lang.value,
+      variant_type: variant.value,
+      variant_confirmed: true, // the owner chose it on this form
+      condition: condition.value || null,
+      binder_id: binder.value ? Number(binder.value) : null,
+      quantity: 1,
+      purchase_price: Number.isFinite(paid) ? paid : null,
+      purchase_date: paid == null ? null : new Date().toISOString().slice(0, 10),
+      notes: notes.value.trim() || null,
+    });
+    renderCard(card.key);
+  };
+
+  return el("div", { class: "panel" },
+    el("div", { class: "fields" },
+      el("label", { class: "field" }, "Variante", variant),
+      el("label", { class: "field" }, "Lingua", lang),
+      el("label", { class: "field" }, "Condizione", condition),
+      el("label", { class: "field" }, "Raccoglitore", binder),
+      el("label", { class: "field" }, "Prezzo pagato (€)", price),
+      el("label", { class: "field" }, "Note", notes)),
+    el("p", { class: "muted small", text: variantHint }),
+    el("button", { class: "btn primary block", text: "Aggiungi allo scrigno", onclick: add }));
+}
+
+async function renderCard(key) {
+  await Catalogue.load();
+  const view = $("view-card");
+  view.innerHTML = "";
+  const card = Catalogue.cardByKey(key);
+  $("title").textContent = card ? card.name : "Carta";
+  if (!card) {
+    view.appendChild(el("div", { class: "panel muted", text: "Carta non trovata nel catalogo." }));
+    return;
+  }
+  const others = card.names.filter((name) => name !== card.name);
+  const attributes = [
+    ["Espansione", card.set.code ? `${card.set.name} (${card.set.code})` : card.set.name],
+    ["Numero", card.set.official ? `${card.number}/${card.set.official}` : card.number],
+    ["Rarità", card.rarity],
+    ["PS", card.hp],
+    ["Tipo di carta", card.category],
+    ["Illustratore", card.illustrator],
+    ["Uscita", formatDate(card.set.releaseDate)],
+  ].filter(([, value]) => value);
+
+  view.append(
+    el("div", { class: "cardhead" },
+      art(card, { big: true, quality: "high" }),
+      el("h2", { text: card.name }),
+      el("div", { class: "muted", text: cardLine(card) }),
+      others.length ? el("div", { class: "muted small", text: others.slice(0, 6).join(" · ") }) : null),
+    el("h2", { text: "Nel tuo scrigno" }),
+    ownedPanel(card),
+    el("h2", { text: "Aggiungi una copia" }),
+    addPanel(card),
+    el("h2", { text: "Prezzi e acquisto" }),
+    el("div", { class: "links" },
+      Catalogue.links(card).map((link) =>
+        el("a", { class: "btn", href: link.url, target: "_blank", rel: "noopener", text: link.exact ? link.label : `${link.label} (ricerca)` }))),
+    el("h2", { text: "Dati della carta" }),
+    el("div", { class: "attrs" },
+      attributes.map(([label, value]) => el("div", { class: "attr" }, el("span", { text: label }), el("span", { text: String(value) }))))
+  );
+}
+
+// ---------- More ----------
+
+function renderMore() {
+  const list = $("binderList");
+  list.innerHTML = "";
+  const binders = Store.binders();
+  if (!binders.length) list.appendChild(el("div", { class: "muted small", text: "Nessun raccoglitore: le carte stanno tutte nello scrigno." }));
+  for (const binder of binders) {
+    const count = Store.stats(binder.id).total;
+    list.appendChild(
+      el("div", { class: "row" },
+        el("div", { class: "grow", text: `${binder.name} (${count})` }),
+        el("button", { class: "btn ghost", text: "Elimina", onclick: () => {
+          if (confirm(`Eliminare "${binder.name}"? Le carte restano nello scrigno.`)) { Store.removeBinder(binder.id); renderMore(); }
+        } }))
+    );
+  }
+  const info = Catalogue.info();
+  if (info) $("catalogueInfo").textContent = `${info.cards.toLocaleString("it-IT")} carte, ${info.sets} espansioni`;
+  $("cameraInfo").textContent = Camera.describe();
+}
+
+$("binderAdd").addEventListener("click", () => {
+  const name = $("binderName").value.trim();
+  if (!name) return;
+  Store.addBinder(name);
+  $("binderName").value = "";
+  renderMore();
+});
+
+$("exportBtn").addEventListener("click", async () => {
+  const name = `scrinium-${new Date().toISOString().slice(0, 10)}.json`;
+  const file = new File([Store.exportJson()], name, { type: "application/json" });
+  try {
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: "Scrinium" });
+    } else {
+      const link = el("a", { href: URL.createObjectURL(file), download: name });
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }
+    $("backupInfo").textContent = `Esportato ${name}.`;
+  } catch (e) {
+    if (e.name !== "AbortError") $("backupInfo").textContent = `Esportazione non riuscita: ${e.message}`;
+  }
+});
+
+$("importBtn").addEventListener("click", () => $("importFile").click());
+$("importFile").addEventListener("change", async (event) => {
+  const file = event.target.files[0];
+  event.target.value = "";
+  if (!file) return;
+  const current = Store.stats().total;
+  if (current && !confirm(`Sostituire le ${current} carte dello scrigno con il contenuto del file?`)) return;
+  try {
+    const stats = Store.importJson(await file.text());
+    $("backupInfo").textContent = `Importate ${stats.total} carte.`;
+    renderMore();
+  } catch (e) {
+    $("backupInfo").textContent = `Importazione non riuscita: ${e.message}`;
+  }
+});
+
+// ---------- Start ----------
+
+$("version").textContent = VERSION;
+$("standalone").textContent =
+  window.navigator.standalone === true || window.matchMedia("(display-mode: standalone)").matches
+    ? "sì" : "no (Condividi > Aggiungi a Home)";
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("sw.js")
+    .then(() => navigator.serviceWorker.ready)
+    .then(() => { $("offline").textContent = "sì, dopo la prima lettura"; })
+    .catch((e) => { $("offline").textContent = `no (${e.message})`; });
+} else {
+  $("offline").textContent = "non supportato";
+}
+
+// Ask the browser to keep the collection; iOS may still clear rarely used sites, hence the export.
+(async () => {
+  try {
+    const storage = navigator.storage;
+    let persisted = storage && storage.persisted ? await storage.persisted() : null;
+    if (persisted === false && storage.persist) persisted = await storage.persist();
+    $("storage").textContent = persisted === null ? "stato non noto" : persisted ? "protetti" : "non protetti: esporta spesso";
+  } catch (e) {
+    $("storage").textContent = "stato non noto";
+  }
+})();
+
+Catalogue.load().then(() => {
+  const info = Catalogue.info();
+  if (info) $("catalogueInfo").textContent = `${info.cards.toLocaleString("it-IT")} carte, ${info.sets} espansioni`;
+});
 
 // Hook used by automated checks.
-window.scriniumTest = { recognizeCanvas, showOutcome, preferredLens, sharpness };
+window.scriniumTest = { recognizeCanvas, showScan };
+
+route();
