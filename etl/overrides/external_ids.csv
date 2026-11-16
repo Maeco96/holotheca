@@ -1,0 +1,4 @@
+# Manual corrections to marketplace IDs, re-applied on every catalogue build.
+# An override replaces all IDs the catalogue holds for that card and provider
+# (or only for the given variant when variant_type is filled in).
+card_source_id,provider,external_id,variant_type

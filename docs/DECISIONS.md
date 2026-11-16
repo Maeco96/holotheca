@@ -17,6 +17,8 @@ One row per decision. Newest last.
 | 2026-11-16 | Two SQLite files: `catalogue` (replaced on update) and `collection` (personal, references cards by source id) | A catalogue rebuild must never touch personal data |
 | 2026-11-16 | Pokémon TCG Pocket sets are flagged `is_digital` and hidden from the physical catalogue | They are in the TCGdex data but are not printed cards |
 | 2026-11-16 | The owner's PC cannot install software, so iloader/SideStore/AltServer (which need iTunes drivers on Windows) are not usable from it; PWA test page added as the no-PC route | Native route needs a computer with installed tools for the first install |
+| 2026-11-16 | Set ids are made globally unique by the ETL: `<id>~asia` when an Asian set reuses an international id (the Japanese Neo sets), `<id>~<file>` for source slips; `sets.source_id` keeps the TCGdex id for image URLs | TCGdex ids are unique per language list, not globally; skipping them would drop 324 cards |
+| 2026-11-16 | The ETL does not infer missing variants (10,003 physical cards have none in TCGdex); they stay empty until decided | Wrong guesses would look like facts; the variant is confirmed by hand anyway |
 
 ## Open
 
