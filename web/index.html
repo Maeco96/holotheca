@@ -43,6 +43,9 @@
     .strip .out { font: 14px/1.35 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
     .strip .meta { font-size: 12px; color: #9aa3bd; }
     .ok { color: #7be39a; }
+    .controls { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+    .controls label { display: flex; align-items: center; gap: 8px; color: #9aa3bd; }
+    .controls select, .controls input { flex: 1; font: inherit; background: #101424; color: #f0f0f0; border: 1px solid #2c3350; border-radius: 8px; padding: 6px; }
   </style>
 </head>
 <body>
@@ -56,6 +59,12 @@
   <div class="row">
     <button id="start">Start camera</button>
     <button id="read" disabled>Capture &amp; read</button>
+  </div>
+  <div class="controls" id="controls" hidden>
+    <label>Lens <select id="lens"></select></label>
+    <label id="zoomRow" hidden>Zoom <span id="zoomVal"></span><input id="zoom" type="range"></label>
+    <label id="focusRow" hidden>Focus <select id="focus"></select></label>
+    <button id="torch" hidden>Torch (flash light): off</button>
   </div>
   <p class="note">Take the card out of its sleeve if you can (sleeves cause glare). Put it inside the dashed frame on a dark matte surface, flat, diffuse light. After a read, the coloured boxes on the photo show where the text was looked for: if they miss the name or the number, the framing is the problem. Then send me a screenshot.</p>
 
