@@ -24,3 +24,8 @@ collection*.csv
 ios/*.xcodeproj/
 ios/build/
 ios/Payload/
+
+# Built at deploy time by etl/export_scan_index.py
+/web/data/
+# Vendor build tooling
+tools/ppocr/node_modules/

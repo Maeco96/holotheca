@@ -43,6 +43,13 @@
     .strip .out { font: 14px/1.35 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
     .strip .meta { font-size: 12px; color: #9aa3bd; }
     .ok { color: #7be39a; }
+    .verdict { margin: 0; font-weight: 600; }
+    .candidates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    .candidate { background: #101424; border-radius: 10px; padding: 8px 10px; border: 1px solid #2c3350; }
+    .candidate.best { border-color: #7be39a; }
+    .candidate .title { font-weight: 600; }
+    .candidate .meta { font-size: 12px; color: #9aa3bd; }
+    details summary { font-size: 13px; color: #9aa3bd; }
     .controls { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
     .controls label { display: flex; align-items: center; gap: 8px; color: #9aa3bd; }
     .controls select, .controls input { flex: 1; font: inherit; background: #101424; color: #f0f0f0; border: 1px solid #2c3350; border-radius: 8px; padding: 6px; }
@@ -66,23 +73,17 @@
     <label id="focusRow" hidden>Focus <select id="focus"></select></label>
     <button id="torch" hidden>Torch (flash light): off</button>
   </div>
-  <p class="note">Take the card out of its sleeve if you can (sleeves cause glare). Put it inside the dashed frame on a dark matte surface, flat, diffuse light. After a read, the coloured boxes on the photo show where the text was looked for: if they miss the name or the number, the framing is the problem. Then send me a screenshot.</p>
+  <p class="note">Hold the phone about 20 cm above the card, flat, with even light and no glare. The card should fill the dashed frame; a sleeve is fine if it does not reflect. Then tap Capture &amp; read.</p>
 
-  <h2>OCR result</h2>
-  <p class="note" id="ocrStatus">Not started. The first read loads about 7 MB of OCR files.</p>
+  <h2>Result</h2>
+  <p class="note" id="ocrStatus">Not started. The first read downloads about 40 MB once.</p>
+  <p id="verdict" class="verdict"></p>
+  <ol id="candidates" class="candidates"></ol>
   <div class="strip">
     <canvas id="cardCanvas" width="10" height="10"></canvas>
     <div class="meta" id="cardMeta"></div>
-  </div>
-  <div class="strip">
-    <canvas id="nameCanvas" width="10" height="10"></canvas>
-    <div class="out" id="nameOut">name: –</div>
-    <div class="meta" id="nameMeta"></div>
-  </div>
-  <div class="strip">
-    <canvas id="numberCanvas" width="10" height="10"></canvas>
-    <div class="out" id="numberOut">number line: –</div>
-    <div class="meta" id="numberMeta"></div>
+    <div class="out" id="readingOut"></div>
+    <details><summary>All text read on the card</summary><div class="out" id="allLines"></div></details>
   </div>
 
   <h2>Device</h2>
@@ -90,12 +91,13 @@
     <dt>Installed as app</dt><dd id="standalone">?</dd>
     <dt>Offline ready</dt><dd id="offline">checking…</dd>
     <dt>Camera</dt><dd id="camera">not started</dd>
+    <dt>Catalogue</dt><dd id="catalogue">loaded at the first read</dd>
     <dt>Stored data</dt><dd id="storage">checking…</dd>
   </dl>
-  <p class="note">Phase 0 test page. Nothing is saved or sent anywhere: the photo stays on the phone.</p>
+  <p class="note">Scanner test page. Nothing is saved or sent anywhere: the photo stays on the phone and the reading runs on it.</p>
   <p id="error" class="err" hidden></p>
 
-  <script src="vendor/tesseract/tesseract.min.js" defer></script>
+  <script src="recognize.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

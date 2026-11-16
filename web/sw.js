@@ -1,10 +1,11 @@
-// Service worker for the app shell and the vendored OCR files.
-// CACHE is rewritten at deploy time; VENDOR_CACHE is stable so the ~7 MB of OCR files
-// are downloaded once and kept across deployments.
+// Service worker for the app shell, the vendored OCR files and the card index.
+// CACHE is rewritten at deploy time; VENDOR_CACHE is stable so the ~40 MB of OCR files
+// are downloaded once and kept across deployments. The card index (data/) follows CACHE,
+// so a new deployment brings a fresh catalogue.
 const CACHE = "scrinium-dev";
-const VENDOR_CACHE = "scrinium-vendor-1";
+const VENDOR_CACHE = "scrinium-vendor-2";
 const SHELL = [
-  "./", "index.html", "app.js", "manifest.webmanifest",
+  "./", "index.html", "app.js", "recognize.js", "manifest.webmanifest",
   "icon-192.png", "icon-512.png", "apple-touch-icon.png",
 ];
 
@@ -30,13 +31,14 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   const isVendor = url.pathname.includes("/vendor/");
+  const isData = url.pathname.includes("/data/");
   event.respondWith(
     caches.match(request).then((hit) => {
       if (hit) return hit;
       return fetch(request).then((response) => {
-        if (isVendor && response.ok) {
+        if (response.ok && (isVendor || isData)) {
           const copy = response.clone();
-          caches.open(VENDOR_CACHE).then((cache) => cache.put(request, copy));
+          caches.open(isVendor ? VENDOR_CACHE : CACHE).then((cache) => cache.put(request, copy));
         }
         return response;
       });
