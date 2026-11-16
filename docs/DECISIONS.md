@@ -13,7 +13,12 @@ One row per decision. Newest last.
 | 2026-11-16 | TCGdex (`tcgdex/cards-database`, MIT) is the only catalogue source to start with; no scraped datasets | Lawful-sources constraint; revisit after the coverage report |
 | 2026-11-16 | Pre-grading shows measurements and a grade range, labelled as indicative and unofficial | Only grading companies issue valid grades |
 | 2026-11-16 | The Lynceus engine is not used in the app; image analysis uses Apple's Vision framework | Lynceus is a Windows/Python plate reader |
+| 2026-11-16 | A card is identified by set and collector number; names are per-language rows | TCGdex lacks Italian names for 82 sets, so lookup must not depend on a localized name |
+| 2026-11-16 | Two SQLite files: `catalogue` (replaced on update) and `collection` (personal, references cards by source id) | A catalogue rebuild must never touch personal data |
+| 2026-11-16 | Pokémon TCG Pocket sets are flagged `is_digital` and hidden from the physical catalogue | They are in the TCGdex data but are not printed cards |
 
 ## Open
 
 - How to fill the catalogue gaps shown in `docs/coverage/tcgdex-coverage.md`.
+- Image coverage per language: the TCGdex asset index is not reachable from the build environment used so far; measure it from GitHub Actions.
+- 22% of international cards and 28% of Asian cards have no variant information in TCGdex: decide whether the ETL infers variants from rarity or leaves them empty.

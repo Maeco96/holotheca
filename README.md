@@ -20,6 +20,7 @@ runtime.
 | Path | Content |
 | --- | --- |
 | `etl/` | Scripts that build and check the catalogue |
+| `db/` | SQLite schemas: `catalogue.sql` (rebuilt by the ETL) and `collection.sql` (personal data) |
 | `docs/DECISIONS.md` | Decision log |
 | `docs/coverage/` | Generated reports on source coverage |
 
@@ -28,6 +29,7 @@ runtime.
 ```sh
 git clone --depth 1 https://github.com/tcgdex/cards-database /tmp/cards-database
 python3 etl/tcgdex_coverage.py /tmp/cards-database --out docs/coverage/tcgdex-coverage.md
+python3 etl/tcgdex_fields.py /tmp/cards-database --out docs/coverage/tcgdex-fields.md
 ```
 
 Requires Python 3.9 or newer, no third-party packages.
