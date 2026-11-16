@@ -1,4 +1,4 @@
--- Scrinium collection schema (the user's own data; never replaced by a catalogue update).
+-- Holotheca collection schema (the user's own data; never replaced by a catalogue update).
 -- References the catalogue by stable source ids, not by row ids, because the
 -- catalogue file is rebuilt from scratch.
 

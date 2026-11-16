@@ -36,6 +36,7 @@ One row per decision. Newest last.
 | 2026-11-16 | Card index schema 2 adds set name, release date, languages, rarity, category, marketplace ids and variants (3.0 MB, 0.8 MB compressed) | Needed by search and the card page |
 | 2026-11-16 | Matching: an "evolves from" line is never taken as the card name, and a cleanly read bottom number is not also matched loosely against other digits | Real read of Gothitelle 092/193 proposed Gothorita 091/193 at 73% through the "Si evolve da Gothorita" line and a near-miss number |
 | 2026-11-16 | Optional scan log (off by default): each reading stores the photo, text lines, candidates and the owner's pick in IndexedDB on the device; the owner exports it as one JSON file | Owner asked for a debug log to improve reading on evidence. Card photos never enter the repository: the file is handed over outside it |
+| 2026-11-16 | The app is named Holotheca (was the working name Scrinium); storage keys and the scan-log format keep the old name; the repository rename is a separate step | Short, international, no app with the same name found, holotheca.app was free; keeping storage keys preserves existing collections |
 
 ## Open
 

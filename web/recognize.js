@@ -2,7 +2,7 @@
 // No DOM access: the same file runs in the page and in the Node tests.
 (function (root, factory) {
   if (typeof module === "object" && module.exports) module.exports = factory();
-  else root.ScriniumRecognize = factory();
+  else root.HolothecaRecognize = factory();
 })(typeof self !== "undefined" ? self : this, function () {
   "use strict";
 
