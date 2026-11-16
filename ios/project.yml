@@ -1,0 +1,28 @@
+name: Scrinium
+options:
+  bundleIdPrefix: com.maeco96
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  Scrinium:
+    type: application
+    platform: iOS
+    sources:
+      - Scrinium
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.maeco96.scrinium
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Scrinium
+        INFOPLIST_KEY_NSCameraUsageDescription: "Scrinium uses the camera to scan trading cards."
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_LSRequiresIPhoneOS: YES

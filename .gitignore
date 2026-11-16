@@ -19,3 +19,8 @@ DerivedData/
 collection*.json
 collection*.csv
 .env
+
+# XcodeGen output
+ios/*.xcodeproj/
+ios/build/
+ios/Payload/
