@@ -71,8 +71,8 @@ function cardLine(card) {
 
 // ---------- Navigation ----------
 
-const VIEWS = { scrigno: "view-scrigno", scan: "view-scan", search: "view-search", more: "view-more", card: "view-card" };
-const ROUTES = { scrigno: "scrigno", scan: "scan", cerca: "search", altro: "more", carta: "card" };
+const VIEWS = { scrigno: "view-scrigno", scan: "view-scan", search: "view-search", more: "view-more", card: "view-card", guide: "view-guide" };
+const ROUTES = { scrigno: "scrigno", scan: "scan", cerca: "search", altro: "more", carta: "card", guida: "guide" };
 let cameraWanted = false;
 
 function route() {
@@ -80,8 +80,9 @@ function route() {
   const view = ROUTES[name] || "scrigno";
   const argument = decodeURIComponent(rest.join("/"));
   for (const [key, id] of Object.entries(VIEWS)) $(id).hidden = key !== view;
-  document.querySelectorAll(".tabbar a").forEach((a) => a.classList.toggle("on", a.dataset.tab === view));
-  const isCard = view === "card";
+  document.querySelectorAll(".tabbar a").forEach((a) => a.classList.toggle("on", a.dataset.tab === (view === "guide" ? "more" : view)));
+  const isCard = view === "card" || view === "guide";
+  if (view === "guide") $("title").textContent = "Guida";
   $("back").hidden = !isCard;
   $("wordmark").hidden = isCard;
   $("title").hidden = !isCard;

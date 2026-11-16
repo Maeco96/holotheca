@@ -170,3 +170,9 @@ pre.debug { font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap
 .tabbar a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); text-decoration: none; font-size: 11px; }
 .tabbar a svg { width: 24px; height: 24px; }
 .tabbar a.on { color: var(--brass); }
+
+/* Guide */
+.guide ol { margin: 0; padding-left: 22px; }
+.guide li { margin: 6px 0; line-height: 1.4; }
+.guide p { margin: 10px 0 0; line-height: 1.45; }
+.guide .panel > p:first-child { margin-top: 0; }

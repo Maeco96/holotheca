@@ -59,6 +59,7 @@
         <svg><use href="#i-chest"/></svg>
         <p>Lo scrigno è vuoto. Scansiona una carta o cercala per nome.</p>
         <a class="btn primary" href="#/scan">Scansiona una carta</a>
+        <a class="btn ghost" href="#/guida">Come si usa</a>
       </div>
     </section>
 
@@ -105,8 +106,92 @@
     <!-- Card page -->
     <section class="view" id="view-card" hidden></section>
 
+    <!-- Guide -->
+    <section class="view guide" id="view-guide" hidden>
+      <p class="muted small" style="margin:0">Versione di prova: usala, e quando qualcosa non torna segnalalo con il registro delle letture (ultimo punto).</p>
+
+      <h2>Installare l'app</h2>
+      <div class="panel">
+        <ol>
+          <li>Apri questa pagina in Safari.</li>
+          <li>Tocca Condividi, poi "Aggiungi alla schermata Home".</li>
+          <li>Apri Scrinium dall'icona: si usa a tutto schermo.</li>
+        </ol>
+        <p class="muted small">La prima lettura scarica circa 40 MB, una volta sola: falla con il Wi-Fi. Dopo, lettura e scrigno funzionano anche senza rete; le immagini delle carte e i negozi no.</p>
+      </div>
+
+      <h2>Scansionare una carta</h2>
+      <div class="panel">
+        <ol>
+          <li>Vai su Scansiona e tocca "Avvia la fotocamera". Alla prima richiesta consenti l'uso della fotocamera.</li>
+          <li>Metti la carta dentro la cornice dorata, telefono a circa 20 cm, carta dritta e tutta visibile.</li>
+          <li>Tocca il pulsante tondo e tieni fermo per un secondo.</li>
+          <li>Compare l'elenco delle carte possibili, la più probabile in alto. Tocca quella giusta per aprirla.</li>
+        </ol>
+        <p class="muted small">Per leggere meglio: luce uniforme, niente riflessi sulla bustina, sfondo scuro e a tinta unita. Se la sala è buia apri "Fotocamera" sotto il risultato e accendi la torcia; lì trovi anche zoom e scelta dell'obiettivo. Se la carta non esce, cercala per nome.</p>
+        <p class="muted small">La percentuale dice quanto il testo letto corrisponde alla carta. La variante (normale, holo, reverse) non la decide mai lo scanner: la scegli tu.</p>
+      </div>
+
+      <h2>Cercare una carta</h2>
+      <div class="panel">
+        <p>In Cerca scrivi il nome in qualsiasi lingua. Per restringere aggiungi il numero: <b>eevee 54</b> oppure <b>gothitelle 92/193</b>.</p>
+      </div>
+
+      <h2>Aggiungere una carta allo scrigno</h2>
+      <div class="panel">
+        <ol>
+          <li>Apri la scheda della carta, da una scansione o dalla ricerca.</li>
+          <li>In "Aggiungi una copia" scegli variante, lingua e condizione guardando la carta vera.</li>
+          <li>Se vuoi indica raccoglitore, prezzo pagato e una nota.</li>
+          <li>Tocca "Aggiungi allo scrigno".</li>
+        </ol>
+        <p class="muted small">Copie identiche si sommano. In "Nel tuo scrigno" usi + e − per cambiare la quantità; a zero la copia viene tolta. Condizioni: MT perfetta, NM quasi perfetta, EX eccellente, GD buona, LP poco giocata, PL giocata, PO rovinata.</p>
+      </div>
+
+      <h2>Raccoglitori</h2>
+      <div class="panel">
+        <p>Li crei in Altro. Nello Scrigno le etichette in alto filtrano per raccoglitore e i totali seguono il filtro. Eliminare un raccoglitore non elimina le carte.</p>
+      </div>
+
+      <h2>Prezzi e negozi</h2>
+      <div class="panel">
+        <p>L'app non mostra ancora prezzi. Nella scheda i pulsanti aprono la pagina della carta su Cardmarket, TCGplayer e CardTrader; "(ricerca)" vuol dire che si apre una ricerca per nome.</p>
+      </div>
+
+      <h2>Salvare e ripristinare lo scrigno</h2>
+      <div class="panel">
+        <p>Lo scrigno vive solo su questo telefono e iOS può cancellarlo se l'app resta a lungo inutilizzata. Esporta spesso.</p>
+        <ol>
+          <li>Altro, poi "Esporta": si apre il foglio di condivisione.</li>
+          <li>Scegli "Salva su File" (o inviatelo per posta): è un file <b>scrinium-data.json</b>.</li>
+          <li>Per ripristinare: Altro, "Importa", scegli il file. Sostituisce tutto lo scrigno attuale.</li>
+        </ol>
+        <p class="muted small">Lo stesso file serve per passare lo scrigno a un altro telefono.</p>
+      </div>
+
+      <h2>Segnalare una lettura sbagliata</h2>
+      <div class="panel">
+        <ol>
+          <li>Altro, "Registro delle letture": accendi "Registra ogni lettura".</li>
+          <li>Scansiona come sempre. Dopo ogni lettura tocca la carta giusta, oppure "Nessuna è quella giusta".</li>
+          <li>Quando hai un po' di letture: Altro, "Esporta registro", e manda il file <b>scrinium-letture-data.json</b> a chi segue l'app.</li>
+          <li>Con "Svuota" liberi lo spazio.</li>
+        </ol>
+        <p class="muted small">Il registro contiene le foto delle carte lette, il testo trovato, le carte proposte e la tua scelta. Resta sul telefono finché non lo esporti tu. Tiene le ultime 150 letture.</p>
+      </div>
+
+      <h2>Se qualcosa non va</h2>
+      <div class="panel">
+        <p><b>La fotocamera non parte.</b> Impostazioni, Safari, Fotocamera: consenti. Poi chiudi e riapri l'app.</p>
+        <p><b>Non vedo le immagini delle carte.</b> Serve la rete; alcune carte non hanno immagine nel catalogo.</p>
+        <p><b>Non vedo le novità.</b> Chiudi del tutto l'app e riaprila due volte: la versione è scritta in Altro, Stato.</p>
+        <p style="margin-bottom:0"><b>Lo scrigno è sparito.</b> Importa l'ultima esportazione.</p>
+      </div>
+    </section>
+
     <!-- More -->
     <section class="view" id="view-more" hidden>
+      <a class="btn primary block" href="#/guida">Guida: come si usa</a>
       <h2>Il tuo scrigno</h2>
       <div class="panel">
         <p class="muted small" style="margin-top:0">I dati restano solo su questo telefono. Esporta ogni tanto una copia: iOS può cancellare i dati dei siti poco usati.</p>
