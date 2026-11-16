@@ -20,6 +20,7 @@ runtime.
 | Path | Content |
 | --- | --- |
 | `etl/` | Scripts that build and check the catalogue |
+| `web/` | PWA test page (camera, install, offline), published with GitHub Pages |
 | `db/` | SQLite schemas: `catalogue.sql` (rebuilt by the ETL) and `collection.sql` (personal data) |
 | `docs/DECISIONS.md` | Decision log |
 | `docs/coverage/` | Generated reports on source coverage |
