@@ -20,6 +20,7 @@ runtime.
 | Path | Content |
 | --- | --- |
 | `etl/` | Scripts that build and check the catalogue |
+| `tests/` | Unit tests for the ETL |
 | `web/` | PWA test page (camera, install, offline), published with GitHub Pages |
 | `db/` | SQLite schemas: `catalogue.sql` (rebuilt by the ETL) and `collection.sql` (personal data) |
 | `docs/DECISIONS.md` | Decision log |
@@ -32,5 +33,15 @@ git clone --depth 1 https://github.com/tcgdex/cards-database /tmp/cards-database
 python3 etl/tcgdex_coverage.py /tmp/cards-database --out docs/coverage/tcgdex-coverage.md
 python3 etl/tcgdex_fields.py /tmp/cards-database --out docs/coverage/tcgdex-fields.md
 ```
+
+## Build the catalogue
+
+```sh
+python3 etl/build_catalogue.py /tmp/cards-database --out build/catalogue.sqlite
+python3 -m unittest discover -s tests
+```
+
+Takes about 10 seconds and produces a 21 MB SQLite file (7 MB gzipped). Corrections to marketplace IDs go in
+`etl/overrides/external_ids.csv` and are applied on every build.
 
 Requires Python 3.9 or newer, no third-party packages.

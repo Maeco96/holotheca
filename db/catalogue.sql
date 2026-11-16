@@ -46,7 +46,8 @@ CREATE TABLE series_names (
 ) WITHOUT ROWID;
 
 CREATE TABLE sets (
-    id             TEXT PRIMARY KEY, -- e.g. 'sv08', 'SV8s'
+    id             TEXT PRIMARY KEY, -- unique id: the source id, or '<id>~<suffix>' when ids clash
+    source_id      TEXT NOT NULL,    -- id as declared by TCGdex, used to build image URLs
     series_id      TEXT NOT NULL REFERENCES series(id),
     code           TEXT,             -- code printed on the card, e.g. 'SSP'; NULL when unknown
     official_count INTEGER,          -- the "/191" printed on cards

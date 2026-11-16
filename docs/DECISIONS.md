@@ -17,6 +17,8 @@ One row per decision. Newest last.
 | 2026-11-16 | Two SQLite files: `catalogue` (replaced on update) and `collection` (personal, references cards by source id) | A catalogue rebuild must never touch personal data |
 | 2026-11-16 | Pokémon TCG Pocket sets are flagged `is_digital` and hidden from the physical catalogue | They are in the TCGdex data but are not printed cards |
 | 2026-11-16 | The owner's PC cannot install software, so iloader/SideStore/AltServer (which need iTunes drivers on Windows) are not usable from it; PWA test page added as the no-PC route | Native route needs a computer with installed tools for the first install |
+| 2026-11-16 | Set ids are made globally unique by the ETL: `<id>~asia` when an Asian set reuses an international id (the Japanese Neo sets), `<id>~<file>` for source slips; `sets.source_id` keeps the TCGdex id for image URLs | TCGdex ids are unique per language list, not globally; skipping them would drop 324 cards |
+| 2026-11-16 | The ETL infers a variant only when TCGdex lists none and the rarity is unambiguous: Common/Uncommon/Rare become `normal`, any "Holo" rarity becomes `holo`; rows are flagged `inferred` | Owner: "deduci al momento, poi vediamo". Reverse holos, 1st editions and stamps are never guessed; the app must show inferred variants as a guess. Revisit after real scans |
 | 2026-11-16 | PWA test on iPhone (iOS 27.2.1) passed: installs from the Home Screen, starts offline, camera 2160x3840; Safari does not expose focus control; web storage is not guaranteed persistent, so backups are mandatory | Real-device test |
 | 2026-11-16 | Route: PWA first with an OCR read test; the native app (SideInstaller + SideStore) only if browser OCR proves too weak | Owner's choice. No PC software needed; keeps zero cost |
 
@@ -24,4 +26,4 @@ One row per decision. Newest last.
 
 - How to fill the catalogue gaps shown in `docs/coverage/tcgdex-coverage.md`.
 - Image coverage per language: the TCGdex asset index is not reachable from the build environment used so far; measure it from GitHub Actions.
-- 22% of international cards and 28% of Asian cards have no variant information in TCGdex: decide whether the ETL infers variants from rarity or leaves them empty.
+- Inferred variants (from rarity) are provisional: review once real scans show how many are wrong.
