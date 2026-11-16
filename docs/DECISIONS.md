@@ -38,6 +38,7 @@ One row per decision. Newest last.
 | 2026-11-16 | Optional scan log (off by default): each reading stores the photo, text lines, candidates and the owner's pick in IndexedDB on the device; the owner exports it as one JSON file | Owner asked for a debug log to improve reading on evidence. Card photos never enter the repository: the file is handed over outside it |
 | 2026-11-16 | The app is named Holotheca (was the working name Scrinium); storage keys and the scan-log format keep the old name; the repository rename is a separate step | Short, international, no app with the same name found, holotheca.app was free; keeping storage keys preserves existing collections |
 | 2026-11-16 | Scan result shows the most likely card's official TCGdex image large, the other candidates below (tap to bring into focus), then the owner's photo | Owner asked to compare the exact printing against his photo before confirming |
+| 2026-11-16 | Scan log on by default during the beta (`ON_BY_DEFAULT` in web/scanlog.js); the owner can still switch it off | Owner's request: every beta reading should be measurable. Must be turned off when the beta ends |
 | 2026-11-16 | Scan log stores photos as JPEG data URL strings, not Blobs | 0.8.0 log came back empty from Safari private browsing, which refuses Blobs in IndexedDB |
 
 ## Open
@@ -45,4 +46,5 @@ One row per decision. Newest last.
 - How to fill the catalogue gaps shown in `docs/coverage/tcgdex-coverage.md`.
 - Image coverage per language: the TCGdex asset index is not reachable from the build environment used so far; measure it from GitHub Actions.
 - Card image loading from TCGdex and the marketplace link formats are untested on the phone.
+- End of beta: set the scan log back to off by default (`ON_BY_DEFAULT` in web/scanlog.js).
 - Inferred variants (from rarity) are provisional: review once real scans show how many are wrong.
