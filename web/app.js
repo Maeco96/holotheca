@@ -1,4 +1,4 @@
-// Scrinium app shell: views, navigation and the scan flow.
+// Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
 const VERSION = "0.8.0";
 const $ = (id) => document.getElementById(id);
@@ -188,7 +188,7 @@ function getEngine() {
     enginePromise = (async () => {
       $("scanStatus").textContent = "Carico il lettore (circa 40 MB la prima volta)…";
       await loadScript(absolute("vendor/ppocr/ppocr.js"));
-      const { Ocr, ort } = window.ScriniumOcr;
+      const { Ocr, ort } = window.HolothecaOcr;
       ort.env.wasm.wasmPaths = absolute("vendor/ppocr/");
       ort.env.wasm.numThreads = 1; // threads need cross-origin isolation, which GitHub Pages lacks
       return Ocr.create({
@@ -213,8 +213,8 @@ async function recognizeCanvas(canvas) {
   const readMs = Math.round(performance.now() - t0);
   const width = result.resizedImageWidth || canvas.width;
   const height = result.resizedImageHeight || canvas.height;
-  const reading = ScriniumRecognize.parse(result.texts, width, height);
-  const candidates = index ? ScriniumRecognize.match(index, reading, 5) : [];
+  const reading = HolothecaRecognize.parse(result.texts, width, height);
+  const candidates = index ? HolothecaRecognize.match(index, reading, 5) : [];
   return { reading, candidates, readMs, matchMs: 0, catalogue: Boolean(index) };
 }
 
@@ -502,7 +502,7 @@ function renderMore() {
 
 async function shareOrDownload(file) {
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    await navigator.share({ files: [file], title: "Scrinium" });
+    await navigator.share({ files: [file], title: "Holotheca" });
     return;
   }
   const link = el("a", { href: URL.createObjectURL(file), download: file.name });
@@ -537,7 +537,7 @@ $("binderAdd").addEventListener("click", () => {
 });
 
 $("exportBtn").addEventListener("click", async () => {
-  const name = `scrinium-${new Date().toISOString().slice(0, 10)}.json`;
+  const name = `holotheca-${new Date().toISOString().slice(0, 10)}.json`;
   const file = new File([Store.exportJson()], name, { type: "application/json" });
   try {
     await shareOrDownload(file);
@@ -598,7 +598,7 @@ Catalogue.load().then(() => {
 });
 
 // Hook used by automated checks.
-window.scriniumTest = {
+window.holothecaTest = {
   recognizeCanvas, showScan,
   log: async (canvas, outcome) => { currentLogId = await ScanLog.record(canvas, logEntry(canvas, outcome)); },
 };

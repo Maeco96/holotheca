@@ -4,6 +4,7 @@
 const ScanLog = (() => {
   "use strict";
 
+  // Storage names keep the old working name so existing scan logs survive the rename.
   const DB_NAME = "scrinium-scanlog";
   const STORE = "readings";
   const FLAG = "scrinium.scanlog.enabled";
@@ -106,7 +107,7 @@ const ScanLog = (() => {
       readings.push({ ...row, photo: row.photo ? await toDataUrl(row.photo) : null });
     }
     const body = JSON.stringify({ kind: "scrinium-scan-log", exported_at: new Date().toISOString(), ...about, readings });
-    const name = `scrinium-letture-${new Date().toISOString().slice(0, 10)}.json`;
+    const name = `holotheca-letture-${new Date().toISOString().slice(0, 10)}.json`;
     return new File([body], name, { type: "application/json" });
   }
 

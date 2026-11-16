@@ -40,7 +40,7 @@ jobs:
           python3 etl/build_catalogue.py "$RUNNER_TEMP/tcgdex" --out "$RUNNER_TEMP/catalogue.sqlite"
           python3 etl/export_scan_index.py "$RUNNER_TEMP/catalogue.sqlite" --out web/data/scan-index.json
       - name: Stamp cache name
-        run: sed -i 's/scrinium-dev/scrinium-${{ github.run_number }}/' web/sw.js
+        run: sed -i 's/holotheca-dev/holotheca-${{ github.run_number }}/' web/sw.js
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

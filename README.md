@@ -1,4 +1,4 @@
-# Scrinium
+# Holotheca
 
 Personal iPhone app to scan trading cards, starting with Pokémon: camera
 recognition, manual confirmation, virtual binder, card page with marketplace

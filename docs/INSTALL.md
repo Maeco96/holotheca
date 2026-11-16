@@ -1,4 +1,4 @@
-# Installare Scrinium sull'iPhone senza Mac
+# Installare Holotheca sull'iPhone senza Mac
 
 Guida per la Fase 0. Passi verificati sulla documentazione SideStore il 16 novembre 2026
 ([prerequisiti](https://docs.sidestore.io/docs/installation/prerequisites),
@@ -23,12 +23,12 @@ SideStore cambia spesso: se un passo non corrisponde, vale la loro documentazion
 7. Apri LocalDevVPN e connetti. Apri SideStore e accedi con lo stesso Apple Account.
 8. In **My Apps** tocca il contatore "7 DAYS" accanto a SideStore per rinnovarlo.
 
-## Installare Scrinium
+## Installare Holotheca
 
-1. Dall'iPhone apri la pagina [Releases](https://github.com/Maeco96/scrinium/releases) e scarica `Scrinium.ipa` dell'ultima build.
+1. Dall'iPhone apri la pagina [Releases](https://github.com/Maeco96/scrinium/releases) e scarica `Holotheca.ipa` dell'ultima build.
 2. Attiva LocalDevVPN.
-3. In SideStore, scheda **My Apps**, tocca **+** e scegli il file `Scrinium.ipa` da File.
-4. Apri Scrinium e consenti l'accesso alla fotocamera.
+3. In SideStore, scheda **My Apps**, tocca **+** e scegli il file `Holotheca.ipa` da File.
+4. Apri Holotheca e consenti l'accesso alla fotocamera.
 
 ## Limiti dell'Apple Account gratuito
 
@@ -39,7 +39,7 @@ SideStore cambia spesso: se un passo non corrisponde, vale la loro documentazion
 ## Cosa provare e riferire
 
 - [ ] SideStore installato e rinnovato senza errori.
-- [ ] Scrinium installato; in alto compare "Scrinium 0.1.0 (numero build)".
+- [ ] Holotheca installato; in alto compare "Holotheca 0.1.0 (numero build)".
 - [ ] La fotocamera chiede il permesso e mostra l'anteprima.
 - [ ] Avvicinando una carta, a che distanza resta a fuoco quando riempie l'inquadratura.
 - [ ] Rinnovo dopo qualche giorno, senza PC.

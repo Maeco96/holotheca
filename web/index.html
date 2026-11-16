@@ -5,18 +5,18 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Scrinium">
+  <meta name="apple-mobile-web-app-title" content="Holotheca">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#13100d">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="stylesheet" href="styles.css">
-  <title>Scrinium</title>
+  <title>Holotheca</title>
 </head>
 <body>
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <defs>
-      <!-- A small casket: the "scrinium". -->
+      <!-- A small casket: where the collection is kept. -->
       <symbol id="i-chest" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 11V8.5A4.5 4.5 0 0 1 8.5 4h7A4.5 4.5 0 0 1 20 8.5V11"/><rect x="3" y="11" width="18" height="9" rx="1.5"/>
         <path d="M3 11h18"/><rect x="10.3" y="9.3" width="3.4" height="4.4" rx="1"/><path d="M12 11v1.2"/>
@@ -41,7 +41,7 @@
 
   <header class="topbar">
     <button class="back" id="back" hidden aria-label="Indietro"><svg width="22" height="22"><use href="#i-back"/></svg></button>
-    <div class="wordmark" id="wordmark"><svg><use href="#i-chest"/></svg>Scrinium</div>
+    <div class="wordmark" id="wordmark"><svg><use href="#i-chest"/></svg>Holotheca</div>
     <h1 id="title" hidden></h1>
   </header>
 
@@ -115,7 +115,7 @@
         <ol>
           <li>Apri questa pagina in Safari.</li>
           <li>Tocca Condividi, poi "Aggiungi alla schermata Home".</li>
-          <li>Apri Scrinium dall'icona: si usa a tutto schermo.</li>
+          <li>Apri Holotheca dall'icona: si usa a tutto schermo.</li>
         </ol>
         <p class="muted small">La prima lettura scarica circa 40 MB, una volta sola: falla con il Wi-Fi. Dopo, lettura e scrigno funzionano anche senza rete; le immagini delle carte e i negozi no.</p>
       </div>
@@ -163,7 +163,7 @@
         <p>Lo scrigno vive solo su questo telefono e iOS può cancellarlo se l'app resta a lungo inutilizzata. Esporta spesso.</p>
         <ol>
           <li>Altro, poi "Esporta": si apre il foglio di condivisione.</li>
-          <li>Scegli "Salva su File" (o inviatelo per posta): è un file <b>scrinium-data.json</b>.</li>
+          <li>Scegli "Salva su File" (o inviatelo per posta): è un file <b>holotheca-data.json</b>.</li>
           <li>Per ripristinare: Altro, "Importa", scegli il file. Sostituisce tutto lo scrigno attuale.</li>
         </ol>
         <p class="muted small">Lo stesso file serve per passare lo scrigno a un altro telefono.</p>
@@ -174,7 +174,7 @@
         <ol>
           <li>Altro, "Registro delle letture": accendi "Registra ogni lettura".</li>
           <li>Scansiona come sempre. Dopo ogni lettura tocca la carta giusta, oppure "Nessuna è quella giusta".</li>
-          <li>Quando hai un po' di letture: Altro, "Esporta registro", e manda il file <b>scrinium-letture-data.json</b> a chi segue l'app.</li>
+          <li>Quando hai un po' di letture: Altro, "Esporta registro", e manda il file <b>holotheca-letture-data.json</b> a chi segue l'app.</li>
           <li>Con "Svuota" liberi lo spazio.</li>
         </ol>
         <p class="muted small">Il registro contiene le foto delle carte lette, il testo trovato, le carte proposte e la tua scelta. Resta sul telefono finché non lo esporti tu. Tiene le ultime 150 letture.</p>

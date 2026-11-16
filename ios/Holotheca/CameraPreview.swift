@@ -19,7 +19,7 @@ struct CameraPreview: UIViewRepresentable {
 
 final class PreviewView: UIView {
     private let session = AVCaptureSession()
-    private let queue = DispatchQueue(label: "scrinium.camera.session")
+    private let queue = DispatchQueue(label: "holotheca.camera.session")
 
     override class var layerClass: AnyClass {
         AVCaptureVideoPreviewLayer.self

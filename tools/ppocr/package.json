@@ -1,5 +1,5 @@
 {
-  "name": "scrinium-ppocr-bundle",
+  "name": "holotheca-ppocr-bundle",
   "private": true,
   "description": "Builds web/vendor/ppocr: PaddleOCR (PP-OCRv4) text detection and recognition for the browser.",
   "scripts": {
