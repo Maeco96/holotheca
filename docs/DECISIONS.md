@@ -16,6 +16,7 @@ One row per decision. Newest last.
 | 2026-11-16 | A card is identified by set and collector number; names are per-language rows | TCGdex lacks Italian names for 82 sets, so lookup must not depend on a localized name |
 | 2026-11-16 | Two SQLite files: `catalogue` (replaced on update) and `collection` (personal, references cards by source id) | A catalogue rebuild must never touch personal data |
 | 2026-11-16 | Pokémon TCG Pocket sets are flagged `is_digital` and hidden from the physical catalogue | They are in the TCGdex data but are not printed cards |
+| 2026-11-16 | The owner's PC cannot install software, so iloader/SideStore/AltServer (which need iTunes drivers on Windows) are not usable from it; PWA test page added as the no-PC route | Native route needs a computer with installed tools for the first install |
 
 ## Open
 
