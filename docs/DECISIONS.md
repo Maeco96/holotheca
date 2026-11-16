@@ -29,9 +29,17 @@ One row per decision. Newest last.
 | 2026-11-16 | The scanner does not trust fixed positions: it reads every text line on the card, then ranks catalogue cards by name, collector number and total, HP, set code and illustrator; the owner confirms | Layouts differ by era and the card is never framed the same way. On the 14 real captures the right card is first on 13; the miss (a blurred basic energy) is reported as unsure |
 | 2026-11-16 | The card index (`web/data/scan-index.json`, 1.8 MB) is built from TCGdex at deploy time by the Pages workflow and is not committed | Keeps the repository free of generated data and refreshes the catalogue at every deployment |
 | 2026-11-16 | Camera: the page picks the plain wide back camera when the phone lists it, starts at 2x zoom when zoom is exposed, and keeps the sharpest of 5 frames | Owner asked the app to choose the camera. The combined triple camera switches lens by itself at close range; 2x from about 20 cm keeps the main lens in focus. Lens labels are matched by words, so this is unverified on iOS until tested |
+| 2026-11-16 | App 0.8.0: the test page becomes the app shell with four sections (Scrigno, Scansiona, Cerca, Altro) and a card page; interface text in Italian, code in English | Owner asked for a tidier, nicer app modelled on a card-page layout he likes. Plain HTML, CSS and JavaScript, no framework and no build step |
+| 2026-11-16 | The collection is kept in the browser's `localStorage`, with the field names of `db/collection.sql`, and can be exported to and imported from a JSON file. Provisional | Simplest storage that works offline today; iOS may clear site data, hence the export. To be replaced by SQLite in the browser when the collection grows |
+| 2026-11-16 | Card images are loaded from `assets.tcgdex.net` when online and are not stored in the repository or the index; a name placeholder is shown otherwise | Keeps the repository free of card images. Unverified from the build environment, which cannot reach that host: to be checked on the phone |
+| 2026-11-16 | No prices in the app yet: the card page links to Cardmarket, TCGplayer and CardTrader (product page when the catalogue has the id, name search otherwise) | No scraping and no paid source; prices are a later phase |
+| 2026-11-16 | Card index schema 2 adds set name, release date, languages, rarity, category, marketplace ids and variants (3.0 MB, 0.8 MB compressed) | Needed by search and the card page |
+| 2026-11-16 | Matching: an "evolves from" line is never taken as the card name, and a cleanly read bottom number is not also matched loosely against other digits | Real read of Gothitelle 092/193 proposed Gothorita 091/193 at 73% through the "Si evolve da Gothorita" line and a near-miss number |
+| 2026-11-16 | Optional scan log (off by default): each reading stores the photo, text lines, candidates and the owner's pick in IndexedDB on the device; the owner exports it as one JSON file | Owner asked for a debug log to improve reading on evidence. Card photos never enter the repository: the file is handed over outside it |
 
 ## Open
 
 - How to fill the catalogue gaps shown in `docs/coverage/tcgdex-coverage.md`.
 - Image coverage per language: the TCGdex asset index is not reachable from the build environment used so far; measure it from GitHub Actions.
+- Card image loading from TCGdex and the marketplace link formats are untested on the phone.
 - Inferred variants (from rarity) are provisional: review once real scans show how many are wrong.

@@ -145,6 +145,12 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([index["names"][i] for i in charizard[3]], ["Charizard", "Dracaufeu"])
         self.assertEqual(index["illustrators"][charizard[4]], "Mitsuhiro Arita")
         self.assertEqual(index["sets"][sets["base1"]][1:3], ["BS", 102])
+        # Schema 2: what the card page needs (set details, category, variants).
+        self.assertEqual(index["schema"], 2)
+        self.assertEqual(len(index["sets"][sets["base1"]]), 8)
+        self.assertEqual(len(charizard), 11)
+        self.assertEqual(charizard[6], "P")
+        self.assertIsInstance(charizard[10], str)
 
     def test_search_and_foreign_keys(self):
         hit = self.db.execute("SELECT card_id FROM card_search WHERE card_search MATCH 'dracaufeu*'").fetchall()

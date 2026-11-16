@@ -9,6 +9,9 @@
   const TOP_ZONE = 0.24; // name, stage and HP sit in the top quarter on every era
   const BOTTOM_ZONE = 0.78; // set code, collector number and copyright sit below this
 
+  // Start of the "Evolves from ..." line in the languages of the catalogue, normalised.
+  const EVOLVES_FROM = /^(evolvesfrom|sievolveda|evolutionde|entwickeltsichaus|evolucionade|evoluide|evoluciona|evolvefrom)/;
+
   /** Lowercase, no accents, letters and digits only. */
   function normalize(text) {
     return String(text || "")
@@ -57,9 +60,10 @@
     const bottom = items.filter((item) => item.cy > BOTTOM_ZONE);
 
     // Every top line is a name candidate: the catalogue decides which one is a real name.
+    // "Evolves from X" lines name another card, so they are left out.
     const nameCandidates = top
       .map((item) => ({ text: item.text, key: normalize(item.text), height: item.h, confidence: item.confidence }))
-      .filter((c) => c.key.replace(/\d/g, "").length >= 3);
+      .filter((c) => c.key.replace(/\d/g, "").length >= 3 && !EVOLVES_FROM.test(c.key));
 
     // HP: a multiple of 10 between 10 and 400 in the top zone; the rightmost wins.
     let hp = null;
@@ -243,6 +247,10 @@
       }
     }
 
+    // A cleanly read "NNN/NNN" on the bottom line is trusted: no card gets credit for a
+    // near miss of it. Fuzzy digit matching is only for numbers the reader garbled.
+    const cleanRead = reading.numbers.some((n) => n.bottom);
+
     const results = [];
     for (const [cardIndex, found] of scores) {
       const card = raw.cards[cardIndex];
@@ -260,13 +268,13 @@
       if (reading.numbers.some((n) => n.number === number && n.total === official)) {
         score += 0.4;
         evidence.push("number/total");
-      } else if (digitsHold(reading.bottomDigits, number, official)) {
+      } else if (!cleanRead && digitsHold(reading.bottomDigits, number, official)) {
         score += 0.3;
         evidence.push("number/total~");
       } else if (codeRead && reading.looseNumbers.includes(number)) {
         score += 0.3;
         evidence.push("number");
-      } else if (digitsNearlyHold(reading.bottomFuzzy, number, official)) {
+      } else if (!cleanRead && digitsNearlyHold(reading.bottomFuzzy, number, official)) {
         score += 0.2;
         evidence.push("number/total~~");
       } else if (reading.numbers.some((n) => n.number === number)) {

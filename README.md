@@ -47,14 +47,18 @@ Takes about 10 seconds and produces a 21 MB SQLite file (7 MB gzipped). Correcti
 
 Requires Python 3.9 or newer, no third-party packages.
 
-## Scanner
+## App
 
-The page in `web/` reads every text line on the card with PaddleOCR (on the device, nothing is uploaded),
+`web/` is the app (installable web app, interface in Italian): `app.js` (views and scan flow), `camera.js`,
+`catalogue.js` (search, card page data, shop links), `store.js` (the collection, kept on the device with
+export and import), `recognize.js` (matching) and `styles.css`.
+
+The scanner reads every text line on the card with PaddleOCR (on the device, nothing is uploaded),
 then `web/recognize.js` ranks catalogue cards by name, collector number, HP, set code and illustrator.
 The owner always confirms the card and its print variant by hand.
 
 ```sh
-python3 etl/export_scan_index.py build/catalogue.sqlite --out web/data/scan-index.json   # card index, 1.8 MB
+python3 etl/export_scan_index.py build/catalogue.sqlite --out web/data/scan-index.json   # card index, 3 MB
 node --test tests/test_recognize.js
 python3 -m http.server 8000 --directory web                                              # then open localhost:8000
 ```

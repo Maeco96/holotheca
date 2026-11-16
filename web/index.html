@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="it">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -7,97 +7,244 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Scrinium">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#181c2c">
+  <meta name="theme-color" content="#13100d">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="stylesheet" href="styles.css">
   <title>Scrinium</title>
-  <style>
-    :root { color-scheme: dark; }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0; min-height: 100vh; min-height: 100dvh;
-      background: #181c2c; color: #f0f0f0;
-      font: 16px/1.4 -apple-system, system-ui, sans-serif;
-      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
-      display: flex; flex-direction: column; gap: 12px;
-    }
-    h1 { margin: 0; font-size: 18px; }
-    h2 { margin: 8px 0 0; font-size: 15px; color: #9aa3bd; font-weight: 600; }
-    .stage { position: relative; height: 60vh; height: 60dvh; background: #000; border-radius: 12px; overflow: hidden; }
-    video { width: 100%; height: 100%; object-fit: cover; display: block; }
-    /* Card-shaped guide: 63 x 88 mm. The OCR crops are taken relative to this rectangle. */
-    .frame {
-      position: absolute; top: 50%; left: 50%; height: 90%; aspect-ratio: 63 / 88;
-      transform: translate(-50%, -50%);
-      border: 2px dashed rgba(255,255,255,.75); border-radius: 10px; pointer-events: none;
-    }
-    .row { display: flex; gap: 8px; }
-    button { flex: 1; font: inherit; padding: 12px 16px; border: 0; border-radius: 10px; background: #5a8cff; color: #fff; }
-    button[disabled] { opacity: .5; }
-    dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 14px; }
-    dt { color: #9aa3bd; } dd { margin: 0; word-break: break-word; }
-    .note { font-size: 13px; color: #9aa3bd; margin: 0; }
-    .err { color: #ff8d8d; }
-    .strip { background: #101424; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
-    .strip canvas { width: 100%; height: auto; border-radius: 6px; background: #000; }
-    .strip .out { font: 14px/1.35 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
-    .strip .meta { font-size: 12px; color: #9aa3bd; }
-    .ok { color: #7be39a; }
-    .verdict { margin: 0; font-weight: 600; }
-    .candidates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-    .candidate { background: #101424; border-radius: 10px; padding: 8px 10px; border: 1px solid #2c3350; }
-    .candidate.best { border-color: #7be39a; }
-    .candidate .title { font-weight: 600; }
-    .candidate .meta { font-size: 12px; color: #9aa3bd; }
-    details summary { font-size: 13px; color: #9aa3bd; }
-    .controls { display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
-    .controls label { display: flex; align-items: center; gap: 8px; color: #9aa3bd; }
-    .controls select, .controls input { flex: 1; font: inherit; background: #101424; color: #f0f0f0; border: 1px solid #2c3350; border-radius: 8px; padding: 6px; }
-  </style>
 </head>
 <body>
-  <h1>Scrinium <span id="version"></span></h1>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <!-- A small casket: the "scrinium". -->
+      <symbol id="i-chest" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11V8.5A4.5 4.5 0 0 1 8.5 4h7A4.5 4.5 0 0 1 20 8.5V11"/><rect x="3" y="11" width="18" height="9" rx="1.5"/>
+        <path d="M3 11h18"/><rect x="10.3" y="9.3" width="3.4" height="4.4" rx="1"/><path d="M12 11v1.2"/>
+      </symbol>
+      <symbol id="i-scan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><rect x="8.5" y="7" width="7" height="10" rx="1.2"/>
+      </symbol>
+      <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>
+      </symbol>
+      <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>
+      </symbol>
+      <symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m14.5 5-7 7 7 7"/>
+      </symbol>
+      <symbol id="i-torch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M13 3 6 13h5l-1 8 7-10h-5l1-8Z"/>
+      </symbol>
+    </defs>
+  </svg>
 
-  <div class="stage">
-    <video id="video" playsinline muted autoplay></video>
-    <div class="frame" id="frame"></div>
-  </div>
+  <header class="topbar">
+    <button class="back" id="back" hidden aria-label="Indietro"><svg width="22" height="22"><use href="#i-back"/></svg></button>
+    <div class="wordmark" id="wordmark"><svg><use href="#i-chest"/></svg>Scrinium</div>
+    <h1 id="title" hidden></h1>
+  </header>
 
-  <div class="row">
-    <button id="start">Start camera</button>
-    <button id="read" disabled>Capture &amp; read</button>
-  </div>
-  <div class="controls" id="controls" hidden>
-    <label>Lens <select id="lens"></select></label>
-    <label id="zoomRow" hidden>Zoom <span id="zoomVal"></span><input id="zoom" type="range"></label>
-    <label id="focusRow" hidden>Focus <select id="focus"></select></label>
-    <button id="torch" hidden>Torch (flash light): off</button>
-  </div>
-  <p class="note">Hold the phone about 20 cm above the card, flat, with even light and no glare. The card should fill the dashed frame; a sleeve is fine if it does not reflect. Then tap Capture &amp; read.</p>
+  <main>
+    <!-- Scrigno: the collection -->
+    <section class="view" id="view-scrigno" hidden>
+      <div class="summary">
+        <div class="stat"><b id="statTotal">0</b><span>carte</span></div>
+        <div class="stat"><b id="statDistinct">0</b><span>diverse</span></div>
+        <div class="stat"><b id="statSpent">–</b><span>spesi</span></div>
+      </div>
+      <div class="chiprow" id="binderChips"></div>
+      <div class="grid" id="collectionGrid"></div>
+      <div class="panel empty" id="collectionEmpty" hidden>
+        <svg><use href="#i-chest"/></svg>
+        <p>Lo scrigno è vuoto. Scansiona una carta o cercala per nome.</p>
+        <a class="btn primary" href="#/scan">Scansiona una carta</a>
+        <a class="btn ghost" href="#/guida">Come si usa</a>
+      </div>
+    </section>
 
-  <h2>Result</h2>
-  <p class="note" id="ocrStatus">Not started. The first read downloads about 40 MB once.</p>
-  <p id="verdict" class="verdict"></p>
-  <ol id="candidates" class="candidates"></ol>
-  <div class="strip">
-    <canvas id="cardCanvas" width="10" height="10"></canvas>
-    <div class="meta" id="cardMeta"></div>
-    <div class="out" id="readingOut"></div>
-    <details><summary>All text read on the card</summary><div class="out" id="allLines"></div></details>
-  </div>
+    <!-- Scan -->
+    <section class="view" id="view-scan" hidden>
+      <div class="stage">
+        <video id="video" playsinline muted autoplay></video>
+        <div class="frame" id="frame"></div>
+        <div class="hint" id="scanHint">Carta dentro la cornice, telefono a circa 20 cm</div>
+        <button class="btn primary start" id="startCamera">Avvia la fotocamera</button>
+      </div>
+      <button class="shutter" id="shutter" disabled aria-label="Leggi la carta"></button>
+      <p class="muted small" id="scanStatus" style="text-align:center;margin:0">La prima lettura scarica circa 40 MB, una volta sola.</p>
+      <p class="error" id="scanError" hidden></p>
 
-  <h2>Device</h2>
-  <dl>
-    <dt>Installed as app</dt><dd id="standalone">?</dd>
-    <dt>Offline ready</dt><dd id="offline">checking…</dd>
-    <dt>Camera</dt><dd id="camera">not started</dd>
-    <dt>Catalogue</dt><dd id="catalogue">loaded at the first read</dd>
-    <dt>Stored data</dt><dd id="storage">checking…</dd>
-  </dl>
-  <p class="note">Scanner test page. Nothing is saved or sent anywhere: the photo stays on the phone and the reading runs on it.</p>
-  <p id="error" class="err" hidden></p>
+      <div id="scanResult" hidden>
+        <h2 id="verdict"></h2>
+        <div class="list" id="candidates" style="margin-top:12px"></div>
+        <button class="btn ghost block" id="noneRight" hidden style="margin-top:10px">Nessuna è quella giusta</button>
+      </div>
+
+      <details class="panel" id="camPanel" hidden>
+        <summary>Fotocamera</summary>
+        <div class="camtools" style="margin-top:10px">
+          <label>Obiettivo <select id="lens"></select></label>
+          <label id="zoomRow" hidden>Zoom <span id="zoomVal"></span><input id="zoom" type="range"></label>
+          <button class="btn" id="torch" hidden>Torcia</button>
+        </div>
+      </details>
+      <details class="panel" id="readPanel" hidden>
+        <summary>Dettagli della lettura</summary>
+        <canvas class="debug" id="cardCanvas" width="10" height="10"></canvas>
+        <pre class="debug" id="readingOut"></pre>
+      </details>
+    </section>
+
+    <!-- Search -->
+    <section class="view" id="view-search" hidden>
+      <div class="search"><input id="searchInput" type="search" placeholder="Nome, oppure nome e numero: eevee 54" autocomplete="off" autocapitalize="off"></div>
+      <p class="muted small" id="searchInfo" style="margin:0">Cerca in tutte le lingue del catalogo.</p>
+      <div class="list" id="searchResults"></div>
+    </section>
+
+    <!-- Card page -->
+    <section class="view" id="view-card" hidden></section>
+
+    <!-- Guide -->
+    <section class="view guide" id="view-guide" hidden>
+      <p class="muted small" style="margin:0">Versione di prova: usala, e quando qualcosa non torna segnalalo con il registro delle letture (ultimo punto).</p>
+
+      <h2>Installare l'app</h2>
+      <div class="panel">
+        <ol>
+          <li>Apri questa pagina in Safari.</li>
+          <li>Tocca Condividi, poi "Aggiungi alla schermata Home".</li>
+          <li>Apri Scrinium dall'icona: si usa a tutto schermo.</li>
+        </ol>
+        <p class="muted small">La prima lettura scarica circa 40 MB, una volta sola: falla con il Wi-Fi. Dopo, lettura e scrigno funzionano anche senza rete; le immagini delle carte e i negozi no.</p>
+      </div>
+
+      <h2>Scansionare una carta</h2>
+      <div class="panel">
+        <ol>
+          <li>Vai su Scansiona e tocca "Avvia la fotocamera". Alla prima richiesta consenti l'uso della fotocamera.</li>
+          <li>Metti la carta dentro la cornice dorata, telefono a circa 20 cm, carta dritta e tutta visibile.</li>
+          <li>Tocca il pulsante tondo e tieni fermo per un secondo.</li>
+          <li>Compare l'elenco delle carte possibili, la più probabile in alto. Tocca quella giusta per aprirla.</li>
+        </ol>
+        <p class="muted small">Per leggere meglio: luce uniforme, niente riflessi sulla bustina, sfondo scuro e a tinta unita. Se la sala è buia apri "Fotocamera" sotto il risultato e accendi la torcia; lì trovi anche zoom e scelta dell'obiettivo. Se la carta non esce, cercala per nome.</p>
+        <p class="muted small">La percentuale dice quanto il testo letto corrisponde alla carta. La variante (normale, holo, reverse) non la decide mai lo scanner: la scegli tu.</p>
+      </div>
+
+      <h2>Cercare una carta</h2>
+      <div class="panel">
+        <p>In Cerca scrivi il nome in qualsiasi lingua. Per restringere aggiungi il numero: <b>eevee 54</b> oppure <b>gothitelle 92/193</b>.</p>
+      </div>
+
+      <h2>Aggiungere una carta allo scrigno</h2>
+      <div class="panel">
+        <ol>
+          <li>Apri la scheda della carta, da una scansione o dalla ricerca.</li>
+          <li>In "Aggiungi una copia" scegli variante, lingua e condizione guardando la carta vera.</li>
+          <li>Se vuoi indica raccoglitore, prezzo pagato e una nota.</li>
+          <li>Tocca "Aggiungi allo scrigno".</li>
+        </ol>
+        <p class="muted small">Copie identiche si sommano. In "Nel tuo scrigno" usi + e − per cambiare la quantità; a zero la copia viene tolta. Condizioni: MT perfetta, NM quasi perfetta, EX eccellente, GD buona, LP poco giocata, PL giocata, PO rovinata.</p>
+      </div>
+
+      <h2>Raccoglitori</h2>
+      <div class="panel">
+        <p>Li crei in Altro. Nello Scrigno le etichette in alto filtrano per raccoglitore e i totali seguono il filtro. Eliminare un raccoglitore non elimina le carte.</p>
+      </div>
+
+      <h2>Prezzi e negozi</h2>
+      <div class="panel">
+        <p>L'app non mostra ancora prezzi. Nella scheda i pulsanti aprono la pagina della carta su Cardmarket, TCGplayer e CardTrader; "(ricerca)" vuol dire che si apre una ricerca per nome.</p>
+      </div>
+
+      <h2>Salvare e ripristinare lo scrigno</h2>
+      <div class="panel">
+        <p>Lo scrigno vive solo su questo telefono e iOS può cancellarlo se l'app resta a lungo inutilizzata. Esporta spesso.</p>
+        <ol>
+          <li>Altro, poi "Esporta": si apre il foglio di condivisione.</li>
+          <li>Scegli "Salva su File" (o inviatelo per posta): è un file <b>scrinium-data.json</b>.</li>
+          <li>Per ripristinare: Altro, "Importa", scegli il file. Sostituisce tutto lo scrigno attuale.</li>
+        </ol>
+        <p class="muted small">Lo stesso file serve per passare lo scrigno a un altro telefono.</p>
+      </div>
+
+      <h2>Segnalare una lettura sbagliata</h2>
+      <div class="panel">
+        <ol>
+          <li>Altro, "Registro delle letture": accendi "Registra ogni lettura".</li>
+          <li>Scansiona come sempre. Dopo ogni lettura tocca la carta giusta, oppure "Nessuna è quella giusta".</li>
+          <li>Quando hai un po' di letture: Altro, "Esporta registro", e manda il file <b>scrinium-letture-data.json</b> a chi segue l'app.</li>
+          <li>Con "Svuota" liberi lo spazio.</li>
+        </ol>
+        <p class="muted small">Il registro contiene le foto delle carte lette, il testo trovato, le carte proposte e la tua scelta. Resta sul telefono finché non lo esporti tu. Tiene le ultime 150 letture.</p>
+      </div>
+
+      <h2>Se qualcosa non va</h2>
+      <div class="panel">
+        <p><b>La fotocamera non parte.</b> Impostazioni, Safari, Fotocamera: consenti. Poi chiudi e riapri l'app.</p>
+        <p><b>Non vedo le immagini delle carte.</b> Serve la rete; alcune carte non hanno immagine nel catalogo.</p>
+        <p><b>Non vedo le novità.</b> Chiudi del tutto l'app e riaprila due volte: la versione è scritta in Altro, Stato.</p>
+        <p style="margin-bottom:0"><b>Lo scrigno è sparito.</b> Importa l'ultima esportazione.</p>
+      </div>
+    </section>
+
+    <!-- More -->
+    <section class="view" id="view-more" hidden>
+      <a class="btn primary block" href="#/guida">Guida: come si usa</a>
+      <h2>Il tuo scrigno</h2>
+      <div class="panel">
+        <p class="muted small" style="margin-top:0">I dati restano solo su questo telefono. Esporta ogni tanto una copia: iOS può cancellare i dati dei siti poco usati.</p>
+        <div class="row">
+          <button class="btn grow" id="exportBtn">Esporta</button>
+          <button class="btn grow" id="importBtn">Importa</button>
+          <input type="file" id="importFile" accept="application/json,.json" hidden>
+        </div>
+        <p class="small" id="backupInfo" style="margin-bottom:0"></p>
+      </div>
+      <h2>Raccoglitori</h2>
+      <div class="panel">
+        <div class="list" id="binderList"></div>
+        <div class="row" style="margin-top:10px">
+          <div class="field grow"><input id="binderName" placeholder="Nuovo raccoglitore" maxlength="40"></div>
+          <button class="btn" id="binderAdd">Aggiungi</button>
+        </div>
+      </div>
+      <h2>Registro delle letture</h2>
+      <div class="panel">
+        <p class="muted small" style="margin-top:0">Serve a migliorare lo scanner: salva su questo telefono la foto letta, il testo trovato, le carte proposte e quella che scegli. Non viene inviato nulla: lo esporti tu.</p>
+        <label class="row"><input type="checkbox" id="logToggle"> <span class="grow">Registra ogni lettura</span></label>
+        <div class="row" style="margin-top:10px">
+          <button class="btn grow" id="logExport">Esporta registro</button>
+          <button class="btn ghost" id="logClear">Svuota</button>
+        </div>
+        <p class="small" id="logInfo" style="margin-bottom:0"></p>
+      </div>
+      <h2>Stato</h2>
+      <div class="attrs">
+        <div class="attr"><span>Versione</span><span id="version"></span></div>
+        <div class="attr"><span>Installata come app</span><span id="standalone"></span></div>
+        <div class="attr"><span>Uso senza rete</span><span id="offline">verifica…</span></div>
+        <div class="attr"><span>Catalogo</span><span id="catalogueInfo">non caricato</span></div>
+        <div class="attr"><span>Dati salvati</span><span id="storage">verifica…</span></div>
+        <div class="attr"><span>Fotocamera</span><span id="cameraInfo" class="small">non avviata</span></div>
+      </div>
+      <p class="muted small">Le letture avvengono sul telefono: nessuna foto viene inviata. I dati delle carte vengono da TCGdex. I prezzi non sono inclusi: i pulsanti nella scheda aprono i negozi.</p>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <a href="#/scrigno" data-tab="scrigno"><svg><use href="#i-chest"/></svg>Scrigno</a>
+    <a href="#/scan" data-tab="scan"><svg><use href="#i-scan"/></svg>Scansiona</a>
+    <a href="#/cerca" data-tab="search"><svg><use href="#i-search"/></svg>Cerca</a>
+    <a href="#/altro" data-tab="more"><svg><use href="#i-more"/></svg>Altro</a>
+  </nav>
 
   <script src="recognize.js" defer></script>
+  <script src="catalogue.js" defer></script>
+  <script src="store.js" defer></script>
+  <script src="camera.js" defer></script>
+  <script src="scanlog.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

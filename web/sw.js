@@ -5,7 +5,8 @@
 const CACHE = "scrinium-dev";
 const VENDOR_CACHE = "scrinium-vendor-2";
 const SHELL = [
-  "./", "index.html", "app.js", "recognize.js", "manifest.webmanifest",
+  "./", "index.html", "styles.css", "app.js", "recognize.js", "catalogue.js", "store.js", "camera.js", "scanlog.js",
+  "manifest.webmanifest",
   "icon-192.png", "icon-512.png", "apple-touch-icon.png",
 ];
 
