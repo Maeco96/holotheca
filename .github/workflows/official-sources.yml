@@ -1,0 +1,63 @@
+name: Official sources
+
+# Collects card facts (id, set, number, name, image address) from the official card sites and
+# compares them with the TCGdex catalogue. Images are not copied: the app loads them from the
+# official site. Big sites take several runs: each run resumes from the saved file.
+on:
+  push:
+    paths:
+      - "etl/sources/official.py"
+      - "etl/sources/compare.py"
+      - ".github/workflows/official-sources.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "smoke (a few cards per site) or full"
+        default: smoke
+
+permissions:
+  contents: write
+
+concurrency:
+  group: official-sources
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        source: [ja, ko, zh-tw]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Restore what earlier runs collected
+        uses: actions/cache/restore@v4
+        with:
+          path: etl/sources/data/${{ matrix.source }}.json
+          key: official-${{ matrix.source }}-${{ github.run_id }}
+          restore-keys: official-${{ matrix.source }}-
+      - name: Collect
+        run: |
+          if [ "${{ github.event.inputs.mode || 'smoke' }}" = "full" ]; then
+            python3 etl/sources/official.py "${{ matrix.source }}" --out "etl/sources/data/${{ matrix.source }}.json" --budget 320
+          else
+            python3 etl/sources/official.py "${{ matrix.source }}" --out "$RUNNER_TEMP/${{ matrix.source }}.json" --max-pages 2 --limit 5
+            python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps(d, ensure_ascii=False, indent=1))" "$RUNNER_TEMP/${{ matrix.source }}.json"
+          fi
+      - name: Save for the next run
+        if: always() && github.event.inputs.mode == 'full'
+        uses: actions/cache/save@v4
+        with:
+          path: etl/sources/data/${{ matrix.source }}.json
+          key: official-${{ matrix.source }}-${{ github.run_id }}
+      - uses: actions/upload-artifact@v4
+        if: always() && github.event.inputs.mode == 'full'
+        with:
+          name: official-${{ matrix.source }}
+          path: etl/sources/data/${{ matrix.source }}.json
