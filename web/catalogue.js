@@ -167,21 +167,42 @@ const Catalogue = (() => {
     ].filter(Boolean);
   }
 
-  /**
-   * Search by name in any language, optionally with a number: "gothitelle", "eevee 54", "92/193".
-   * Newest sets first.
-   */
-  function search(text, limit = 60) {
+  /** Every expansion, newest first, as { id, name, code, releaseDate, langs, cards }. */
+  function sets() {
     if (!index) return [];
     const raw = index.raw;
+    const counts = new Array(raw.sets.length).fill(0);
+    for (const row of raw.cards) counts[row[0]]++;
+    return raw.sets
+      .map((set, i) => ({
+        id: set[0], code: set[1], name: set[3], releaseDate: set[4] || "", langs: set[5] || [], cards: counts[i],
+      }))
+      .filter((set) => set.cards > 0)
+      .sort((a, b) => (a.releaseDate < b.releaseDate ? 1 : a.releaseDate > b.releaseDate ? -1 : 0));
+  }
+
+  /**
+   * Search by name in any language, optionally with a number: "gothitelle", "eevee 54", "92/193".
+   * Newest sets first. `filter` narrows by expansion ({ setId }) and by the language the
+   * expansion was printed in ({ lang }); an expansion alone lists all its cards in number order.
+   */
+  function search(text, limit = 60, filter = {}) {
+    if (!index) return [];
+    const raw = index.raw;
+    const setIndex = filter.setId ? raw.sets.findIndex((set) => set[0] === filter.setId) : -1;
+    if (filter.setId && setIndex < 0) return [];
     const numberMatch = text.match(/(\d{1,3})\s*(?:\/\s*(\d{1,3}))?\s*$/);
     const words = HolothecaRecognize.normalize(text.replace(/\d+\s*(\/\s*\d+)?\s*$/, ""));
     const wantedNumber = numberMatch ? HolothecaRecognize.normalizeNumber(numberMatch[1]) : null;
     const wantedTotal = numberMatch && numberMatch[2] ? Number(numberMatch[2]) : null;
-    if (words.length < 2 && !wantedNumber) return [];
+    if (words.length < 2 && !wantedNumber && setIndex < 0) return [];
 
     let pool;
-    if (words.length >= 2) {
+    if (words.length < 2 && !wantedNumber) {
+      pool = [];
+      raw.cards.forEach((row, i) => { if (row[0] === setIndex) pool.push(i); });
+      limit = pool.length;
+    } else if (words.length >= 2) {
       const set = new Set();
       index.nameKeys.forEach((key, nameIndex) => {
         if (key.includes(words)) for (const i of index.byName.get(nameIndex) || []) set.add(i);
@@ -192,10 +213,13 @@ const Catalogue = (() => {
     }
     const found = pool.filter((i) => {
       const row = raw.cards[i];
+      if (setIndex >= 0 && row[0] !== setIndex) return false;
+      if (filter.lang && !(raw.sets[row[0]][5] || []).includes(filter.lang)) return false;
       if (wantedNumber && HolothecaRecognize.normalizeNumber(row[1]) !== wantedNumber) return false;
       if (wantedTotal && raw.sets[row[0]][2] !== wantedTotal) return false;
       return true;
     });
+    if (setIndex >= 0) return found.slice(0, limit).map(card); // cards are stored in number order
     found.sort((a, b) => {
       const da = raw.sets[raw.cards[a][0]][4] || "";
       const db = raw.sets[raw.cards[b][0]][4] || "";
@@ -204,5 +228,5 @@ const Catalogue = (() => {
     return found.slice(0, limit).map(card);
   }
 
-  return { load, info, card, cardByKey, images, parseVariant, links, search, prepared: () => index };
+  return { load, info, card, cardByKey, images, parseVariant, links, search, sets, prepared: () => index };
 })();
