@@ -1,21 +1,20 @@
 name: Image coverage
 
-# Asks the TCGdex asset server which card images exist, per set and language, and prints a table.
-# The asset server is not reachable from every build environment, so this runs here.
+# Measures how many cards and expansion logos have no picture on assets.tcgdex.net.
 on:
+  workflow_dispatch:
   push:
     paths:
-      - "etl/check_images.py"
+      - "etl/sources/image_coverage.py"
       - ".github/workflows/image-coverage.yml"
-  workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  check:
+  coverage:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,13 +25,28 @@ jobs:
           git clone --depth 1 https://github.com/tcgdex/cards-database.git "$RUNNER_TEMP/tcgdex"
           python3 etl/build_catalogue.py "$RUNNER_TEMP/tcgdex" --out "$RUNNER_TEMP/catalogue.sqlite"
           python3 etl/export_scan_index.py "$RUNNER_TEMP/catalogue.sqlite" --out "$RUNNER_TEMP/scan-index.json"
-      - name: Ask for the images
+          python3 etl/sources/compare.py "$RUNNER_TEMP/catalogue.sqlite" etl/sources/data/*.json \
+            --report "$RUNNER_TEMP/cmp.md" --images "$RUNNER_TEMP/official-images.json"
+      - name: Measure
         run: |
-          python3 etl/check_images.py "$RUNNER_TEMP/scan-index.json" --out "$RUNNER_TEMP/tcgdex-images.md" \
-            --card base2-54 --card base2-8 --card base1-10 --card basep-46 --card M3-008 --card M3-017 \
-            --card 30th-115 --card me02-087 --card sv03-223
-          cat "$RUNNER_TEMP/tcgdex-images.md" >> "$GITHUB_STEP_SUMMARY"
+          mkdir -p out
+          python3 etl/sources/image_coverage.py "$RUNNER_TEMP/scan-index.json" "$RUNNER_TEMP/official-images.json" \
+            --out out/image-coverage.md --json out/image-coverage.json
       - uses: actions/upload-artifact@v4
         with:
-          name: tcgdex-images
-          path: ${{ runner.temp }}/tcgdex-images.md
+          name: image-coverage
+          path: out/
+      - name: Commit the report
+        run: |
+          mkdir -p docs/coverage
+          cp out/image-coverage.md docs/coverage/image-coverage.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/coverage
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Image coverage report from run ${{ github.run_number }}"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
