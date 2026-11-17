@@ -13,8 +13,20 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Fifth pass: the Korean "load more" request
-    "https://pokemoncard.co.kr/cards#context=get_more_cards",
+    # Sixth pass: community wikis with per-language card lists and scans (MediaWiki API)
+    "https://wiki.pokemoncentral.it/robots.txt",
+    "https://wiki.pokemoncentral.it/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&generator=images&gimlimit=20&titles=Charizard_(Set_Base_4)",
+    "https://wiki.pokemoncentral.it/api.php?action=parse&format=json&prop=wikitext&page=Set_Base_(GCC)",
+    "https://www.pokewiki.de/robots.txt",
+    "https://www.pokewiki.de/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&generator=images&gimlimit=20&titles=Glurak_(Grundset_4)",
+    "https://www.wikidex.net/robots.txt",
+    "https://www.wikidex.net/index.php?title=Charizard_(Base_Set_TCG)#grep=\\.(jpg|png)",
+    "https://www.pokepedia.fr/robots.txt",
+    "https://www.pokepedia.fr/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&generator=images&gimlimit=20&titles=Dracaufeu_(Set_de_Base_4)",
+    "https://bulbapedia.bulbagarden.net/robots.txt",
+    "https://pokedexia.com/robots.txt",
+    "https://pokedexia.com/it/cgu",
+    "https://cdn.pokedexia.com/cards/wizards/base1-it/cards/base1-4-v2-low.webp#referer=https://maeco96.github.io/",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
@@ -76,7 +88,7 @@ def show(url):
         print(body.decode("utf-8", "replace")[:1500])
         return
     if url.endswith(TEXT_KINDS) or "json" in ctype or "text/plain" in ctype:
-        print(body.decode("utf-8", "replace")[:6000])
+        print(body.decode("utf-8", "replace")[:12000])
         return
     if "html" not in ctype:
         return
