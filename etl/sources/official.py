@@ -39,7 +39,7 @@ class Client:
         self.last = 0.0
         self.requests = 0
 
-    def get(self, url, referer=None):
+    def get(self, url, referer=None, form=None):
         for attempt in range(5):
             wait = self.last + self.gap - time.monotonic()
             if wait > 0:
@@ -50,7 +50,12 @@ class Client:
             if referer:
                 headers["Referer"] = referer
             try:
-                with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=40) as r:
+                data = None
+                if form is not None:
+                    data = urllib.parse.urlencode(form).encode()
+                    headers["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8"
+                    headers["X-Requested-With"] = "XMLHttpRequest"
+                with urllib.request.urlopen(urllib.request.Request(url, data=data, headers=headers), timeout=40) as r:
                     return r.read().decode("utf-8", "replace")
             except urllib.error.HTTPError as e:
                 if e.code == 404:
@@ -128,20 +133,34 @@ KO = "https://pokemoncard.co.kr"
 
 
 def ko_list(client, log, max_pages=None):
+    """The card page loads more cards with a POST ("get_more_cards"), one tab per card kind:
+    1 Pokémon, 2 Trainers, 3 Energy. `limit` is the offset the server hands back each time."""
     seen = {}
-    page = 1
-    while True:
-        body = client.get(f"{KO}/cards?page={page}")
-        ids = re.findall(r'/cards/detail/([A-Za-z0-9]+)"', body or "")
-        new = [i for i in dict.fromkeys(ids) if i not in seen]
-        if not new or (max_pages and page > max_pages):
-            break
-        for i in new:
-            seen[i] = {}
-        if page % 50 == 0:
-            log(f"ko: page {page}, {len(seen)} cards")
-        page += 1
-    log(f"ko: {len(seen)} cards on {page - 1} pages")
+    for kind in (1, 2, 3):
+        offset, pages = 0, 0
+        while True:
+            body = client.get(f"{KO}/v2/ajax2_dev2", referer=f"{KO}/cards", form={
+                "action": "get_more_cards", "limit": offset, "GoodsName": "", "CardTypeNum": kind,
+                "CardType": "", "CardMonType": "", "Weakness": "", "Resistance": "", "TechErg": "",
+                "ability_label1": "", "hp": "", "retreat": "", "order": "", "orderby": "",
+            })
+            try:
+                data = json.loads(body or "{}")
+            except json.JSONDecodeError:
+                raise RuntimeError(f"ko: the load-more answer is not JSON: {(body or '')[:200]!r}")
+            rows = data.get("result") or []
+            if not rows or int(data.get("count") or 0) == 0:
+                break
+            for r in rows:
+                seen.setdefault(str(r["CardNum"]), {"kind": kind})
+            new_offset = int(data.get("limit") or 0)
+            pages += 1
+            if new_offset <= offset or (max_pages and pages >= max_pages):
+                break
+            offset = new_offset
+            if pages % 50 == 0:
+                log(f"ko: kind {kind}, {pages} pages, {len(seen)} cards")
+        log(f"ko: kind {kind} done after {pages} pages, {len(seen)} cards so far")
     return seen
 
 
@@ -236,7 +255,8 @@ def main():
             known = json.load(f)
     listed = lister(client, log, args.max_pages)
 
-    todo = [i for i in listed if i not in known or not known[i].get("number")]
+    # newest cards first: they are the ones TCGdex is most likely to lack
+    todo = sorted((i for i in listed if i not in known or not known[i].get("number")), key=lambda i: (len(i), i), reverse=True)
     if args.only_set:
         wanted = set(args.only_set)
         todo = [i for i in todo if re.search(r"/large/([^/]+)/", listed[i].get("image", "")) and re.search(r"/large/([^/]+)/", listed[i]["image"]).group(1) in wanted]
