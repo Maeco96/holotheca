@@ -99,6 +99,11 @@ def main():
             continue
         rows = set_rows(page)
         print(f"{set_id}: {len(rows)} rows", flush=True)
+        total = next(iter(rows.values()))[0] if rows else "0"
+        if total.isdigit():
+            missing = [n for n in range(1, int(total) + 1) if str(n) not in rows and f"{n:02d}" not in rows]
+            print(f"{set_id}: numbers not found in the table: {missing}", flush=True)
+            # the table skips some rows (other markup): keep the numbers visible in the log
         for num, (total, href, name) in rows.items():
             key = f"{set_id}-{num.lstrip('0') or '0'}"
             if key in out and out[key].get("done"):
