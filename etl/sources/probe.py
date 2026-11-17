@@ -13,10 +13,10 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Seventh pass: Pokémon Central set list and card page layout (article pages; its API is
-    # closed to robots)
-    "https://wiki.pokemoncentral.it/Fossil_(GCC)#context=/102",
-    "https://wiki.pokemoncentral.it/Jigglypuff_(Jungle_54)#grep=media\\.pokemoncentral|Debolezza|og:image",
+    # Eighth pass: how Pokémon Central lists the cards of a set
+    "https://wiki.pokemoncentral.it/Fossil_(GCC)#context=Aerodactyl",
+    "https://wiki.pokemoncentral.it/Aerodactyl_(Fossil_1)#grep=og:image|Debolezza|Illustrat|Rarit|/\\d+|prima edizione|Edizione",
+    "https://wiki.pokemoncentral.it/Rocket_(GCC)#context=Dark",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
@@ -85,7 +85,7 @@ def show(url):
     html = body.decode("utf-8", "replace")
     if context:
         for m in re.finditer(re.escape(context), html):
-            print(html[max(0, m.start() - 1500): m.start() + 1500])
+            print(html[max(0, m.start() - 600): m.start() + 1800])
             print("  ----")
             break
         return
