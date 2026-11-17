@@ -13,20 +13,10 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Sixth pass: community wikis with per-language card lists and scans (MediaWiki API)
-    "https://wiki.pokemoncentral.it/robots.txt",
-    "https://wiki.pokemoncentral.it/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&generator=images&gimlimit=20&titles=Charizard_(Set_Base_4)",
-    "https://wiki.pokemoncentral.it/api.php?action=parse&format=json&prop=wikitext&page=Set_Base_(GCC)",
-    "https://www.pokewiki.de/robots.txt",
-    "https://www.pokewiki.de/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&generator=images&gimlimit=20&titles=Glurak_(Grundset_4)",
-    "https://www.wikidex.net/robots.txt",
-    "https://www.wikidex.net/index.php?title=Charizard_(Base_Set_TCG)#grep=\\.(jpg|png)",
-    "https://www.pokepedia.fr/robots.txt",
-    "https://www.pokepedia.fr/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&generator=images&gimlimit=20&titles=Dracaufeu_(Set_de_Base_4)",
-    "https://bulbapedia.bulbagarden.net/robots.txt",
-    "https://pokedexia.com/robots.txt",
-    "https://pokedexia.com/it/cgu",
-    "https://cdn.pokedexia.com/cards/wizards/base1-it/cards/base1-4-v2-low.webp#referer=https://maeco96.github.io/",
+    # Seventh pass: Pokémon Central set list and card page layout (article pages; its API is
+    # closed to robots)
+    "https://wiki.pokemoncentral.it/Fossil_(GCC)#context=/102",
+    "https://wiki.pokemoncentral.it/Jigglypuff_(Jungle_54)#grep=media\\.pokemoncentral|Debolezza|og:image",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
@@ -95,8 +85,9 @@ def show(url):
     html = body.decode("utf-8", "replace")
     if context:
         for m in re.finditer(re.escape(context), html):
-            print(html[max(0, m.start() - 2500): m.start() + 2500])
+            print(html[max(0, m.start() - 1500): m.start() + 1500])
             print("  ----")
+            break
         return
     if grep:
         for line in html.splitlines():
