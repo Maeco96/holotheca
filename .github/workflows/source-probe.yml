@@ -1,0 +1,36 @@
+name: Source probe
+
+# Asks the official card sites what they serve (robots.txt, terms, card search, image paths).
+# These hosts are not reachable from every build environment, so this runs here.
+on:
+  push:
+    paths:
+      - "etl/sources/probe.py"
+      - "etl/sources/scan_language.py"
+      - ".github/workflows/source-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 etl/sources/probe.py
+      - name: Language printed on sample scans
+        run: |
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-ita tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-spa tesseract-ocr-por >/dev/null
+          pip install -q pillow
+          python3 etl/sources/scan_language.py \
+            https://media.pokemoncentral.it/wiki/b/b4/CharizardSetBase4.jpg \
+            https://cdn.pokedexia.com/cards/wizards/base1-it/cards/base1-4-v2-low.webp \
+            https://cdn.pokedexia.com/cards/wizards/base1-en/cards/base1-10-v2-low.webp \
+            "https://www.pokewiki.de/images/8/83/Glurak_%28Grundset_4%29.png" \
+            https://www.pokepedia.fr/images/e/ee/Carte_Set_de_Base_4.png \
+            https://assets.tcgdex.net/en/base/base1/4/high.png

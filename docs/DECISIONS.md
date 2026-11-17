@@ -46,11 +46,15 @@ One row per decision. Newest last.
 | 2026-11-17 | The scanner reads the language of the copy from the words printed on every card and prefills it; the add form always offers the main languages; the Cardmarket link carries the language filter | TCGdex's language list per set is incomplete, which saved Italian cards as English |
 | 2026-11-17 | Matching: copyright years are removed before loose digit matching; a bare promo number counts only together with the name; two-letter set codes count as whole words | First real log: 13/14 right first before, 14/14 after (one owner pick corrected by the photo: Mewtwo 10/102 is Base Set, not Base Set 2) |
 | 2026-11-17 | Camera controls (lens, torch, zoom steps) sit on the preview; a stopped or frozen camera restarts when the app returns to the screen and before a reading | Owner's request; the preview froze now and then on iOS |
+| 2026-11-17 | Besides TCGdex, the catalogue is filled and checked from the official card sites of The Pokémon Company and its licensees: pokemon-card.com (Japan), pokemoncard.co.kr (Korea), asia.pokemon-card.com (Taiwan). A collector in GitHub Actions keeps only facts (official id, set, number, name, image address), politely (1 request/s, named client), and a report lists cards and names that differ from TCGdex. Supersedes "TCGdex only, no scraping" for official sites | Owner: "prendere dalle fonti più ufficiali e complete possibili per coprire i buchi e validare il resto". TCGdex has no images for the Japanese Mega sets, Korean and Chinese cards. pokemon.com is left out (its terms forbid bots and it adds nothing to TCGdex); Cardmarket stays excluded |
+| 2026-11-17 | Official images are not copied: the phone loads them from the official site, after the TCGdex image of the same language | The Japanese and Taiwanese terms allow personal use and forbid redistribution; the repository and the Pages site are public. Owner's choice; offline images are wanted one day, and the terms must be revisited if the app is ever distributed |
 
 ## Open
 
+- Official card images offline (owner, 2026-11-17): today they are loaded from the official sites when shown. Revisit the sites' terms before the app is distributed to anyone beyond the beta testers.
+- Italian WotC-era cards (Base Set, Jungle, ... in Italian) have no image on any official site and none on TCGdex: only our own photos can fill them.
 - How to fill the catalogue gaps shown in `docs/coverage/tcgdex-coverage.md`.
-- Image coverage per language: the TCGdex asset index is not reachable from the build environment used so far; measure it from GitHub Actions.
+- Image coverage per language: measured from GitHub Actions (`image-coverage.yml`, 2026-11-17): Japanese Mega sets, Korean and Chinese cards have no TCGdex image; vintage cards only English/French.
 - Card image loading from TCGdex and the marketplace link formats are untested on the phone.
 - End of beta: set the scan log back to off by default (`ON_BY_DEFAULT` in web/scanlog.js).
 - Inferred variants (from rarity) are provisional: review once real scans show how many are wrong.

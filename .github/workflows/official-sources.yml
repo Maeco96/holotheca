@@ -1,0 +1,105 @@
+name: Official sources
+
+# Collects card facts (id, set, number, name, image address) from the official card sites and
+# compares them with the TCGdex catalogue. Images are not copied: the app loads them from the
+# official site. The facts are committed to etl/sources/data/, and each run resumes from there,
+# so a big site is collected over several runs.
+#
+# A push runs a smoke test (a few cards per site). A full collection runs when the commit
+# message contains [collect], or by hand once this file is on the default branch.
+on:
+  push:
+    paths:
+      - "etl/sources/official.py"
+      - "etl/sources/compare.py"
+      - ".github/workflows/official-sources.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1" # weekly, Monday 03:17 UTC: new sets and corrections
+
+permissions:
+  contents: write
+
+concurrency:
+  # full collections queue one after the other; smoke tests do not wait behind them
+  group: official-sources-${{ github.ref }}-${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[collect]') }}
+  cancel-in-progress: false
+
+env:
+  FULL: ${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[collect]') }}
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [ja, ko, zh-tw]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Collect
+        run: |
+          mkdir -p out
+          if [ "$FULL" = "true" ]; then
+            [ -f "etl/sources/data/${{ matrix.source }}.json" ] && cp "etl/sources/data/${{ matrix.source }}.json" out/
+            python3 etl/sources/official.py "${{ matrix.source }}" --out "out/${{ matrix.source }}.json" --budget 300 --rate 1
+          else
+            python3 etl/sources/official.py "${{ matrix.source }}" --out "out/${{ matrix.source }}.json" --max-pages 2 --limit 5
+            python3 -c "import json,sys; print(json.dumps(json.load(open(sys.argv[1])), ensure_ascii=False, indent=1))" "out/${{ matrix.source }}.json"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: official-${{ matrix.source }}
+          path: out/${{ matrix.source }}.json
+          if-no-files-found: ignore
+
+  compare:
+    needs: collect
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: official-*
+          path: collected
+          merge-multiple: true
+      - name: Build the TCGdex catalogue
+        run: |
+          git clone --depth 1 https://github.com/tcgdex/cards-database.git "$RUNNER_TEMP/tcgdex"
+          python3 etl/build_catalogue.py "$RUNNER_TEMP/tcgdex" --out "$RUNNER_TEMP/catalogue.sqlite"
+      - name: Compare
+        run: |
+          python3 etl/sources/compare.py "$RUNNER_TEMP/catalogue.sqlite" collected/ja.json collected/ko.json collected/zh-tw.json \
+            --report "$RUNNER_TEMP/official-vs-tcgdex.md" --images "$RUNNER_TEMP/official-images.json"
+          cat "$RUNNER_TEMP/official-vs-tcgdex.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-report
+          path: |
+            ${{ runner.temp }}/official-vs-tcgdex.md
+            ${{ runner.temp }}/official-images.json
+      - name: Commit the collected facts
+        if: env.FULL == 'true'
+        run: |
+          mkdir -p etl/sources/data
+          for f in collected/*.json; do cp "$f" etl/sources/data/; done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add etl/sources/data
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -m "Official sources: card facts collected by run ${{ github.run_number }}"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((i * 10))
+          done
+          exit 1

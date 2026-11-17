@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.9.0";
+const VERSION = "0.10.0";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -100,7 +100,7 @@ function art(card, { big = false, quality = "low", lang = null, onImage = null }
   img.addEventListener("load", () => {
     img.classList.remove("loading");
     placeholder.remove();
-    if (onImage) onImage(images[attempt].lang);
+    if (onImage) onImage(images[attempt].lang, images[attempt]);
   });
   img.addEventListener("error", () => {
     attempt += 1;
@@ -120,14 +120,15 @@ function art(card, { big = false, quality = "low", lang = null, onImage = null }
 function imageNote(card, wantedLang) {
   const note = el("div", { class: "muted small imgnote", text: "Carico l'immagine…" });
   const several = card.variants.length > 1 || card.variants.some((token) => token.includes(":"));
-  const onImage = (lang) => {
+  const onImage = (lang, image = null) => {
     if (!lang) {
       note.textContent = "Il catalogo non ha un'immagine di questa carta: confrontala con i dati qui sotto.";
       return;
     }
     const language = (LANG_LABELS[lang] || lang).toLowerCase();
     const other = wantedLang && wantedLang !== lang ? ` (manca quella in ${(LANG_LABELS[wantedLang] || wantedLang).toLowerCase()})` : "";
-    note.textContent = `Immagine di riferimento in ${language}${other}.` +
+    const source = image && typeof image.official === "string" ? `, dal sito ufficiale ${image.official}` : "";
+    note.textContent = `Immagine di riferimento in ${language}${other}${source}.` +
       (several ? " Può mostrare un'altra versione, per esempio con il timbro 1ª edizione: la versione la scegli tu." : "");
   };
   return { note, onImage };

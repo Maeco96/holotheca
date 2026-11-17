@@ -1,0 +1,57 @@
+name: Italian wiki names
+
+# Italian names and scans of the vintage sets from Pokémon Central (TCGdex lacks them).
+# A push runs one set as a test; a commit message with [collect] or a manual run does them all.
+on:
+  push:
+    paths:
+      - "etl/sources/wiki_it.py"
+      - ".github/workflows/wiki-it.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  wiki:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tools
+        run: |
+          sudo apt-get install -y -qq tesseract-ocr tesseract-ocr-ita tesseract-ocr-fra tesseract-ocr-deu tesseract-ocr-spa tesseract-ocr-por > /dev/null
+          pip install -q pillow
+      - name: Collect
+        run: |
+          mkdir -p out
+          [ -f etl/sources/data/wiki-it.json ] && cp etl/sources/data/wiki-it.json out/
+          if [ "${{ github.event_name }}" = "push" ] && ! echo "${{ github.event.head_commit.message }}" | grep -q '\[collect\]'; then
+            python3 etl/sources/wiki_it.py --out out/wiki-it.json --set base3 --budget 5
+          else
+            python3 etl/sources/wiki_it.py --out out/wiki-it.json --budget 300
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wiki-it
+          path: out/wiki-it.json
+          if-no-files-found: ignore
+      - name: Commit the facts
+        if: github.event_name != 'push' || contains(github.event.head_commit.message, '[collect]')
+        run: |
+          mkdir -p etl/sources/data
+          cp out/wiki-it.json etl/sources/data/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add etl/sources/data
+          if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
+          git commit -m "Pokémon Central: Italian names and scans collected by run ${{ github.run_number }}"
+          for i in 1 2 3 4; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((i * 10))
+          done
+          exit 1
