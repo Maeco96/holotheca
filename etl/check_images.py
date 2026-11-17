@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -31,18 +32,18 @@ def image_url(pattern: str, lang: str, series: str, set_source: str, number: str
 
 
 def exists(url: str) -> int:
-    """HTTP status of the image, 0 when the server could not be reached."""
-    for method in ("HEAD", "GET"):
-        request = urllib.request.Request(url, method=method, headers={"User-Agent": USER_AGENT})
+    """HTTP status of the image; 0 when the server could not be reached or kept answering 5xx."""
+    for attempt in range(4):
+        request = urllib.request.Request(url, method="GET", headers={"User-Agent": USER_AGENT, "Range": "bytes=0-0"})
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
-                return response.status
+                return 200 if response.status in (200, 206) else response.status
         except urllib.error.HTTPError as error:
-            if error.code == 405 and method == "HEAD":
-                continue
-            return error.code
+            if error.code < 500 and error.code != 429:
+                return error.code
         except (urllib.error.URLError, TimeoutError, OSError):
-            return 0
+            pass
+        time.sleep(2 * (attempt + 1))
     return 0
 
 
@@ -73,7 +74,7 @@ def main() -> None:
             for number in sorted(picks):
                 jobs.append((set_id, lang, number, image_url(pattern, lang, series, source, number)))
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         statuses = list(pool.map(lambda job: exists(job[3]), jobs))
 
     per_lang: dict[str, list[int]] = {}
