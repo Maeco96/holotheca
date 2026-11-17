@@ -175,10 +175,35 @@ const Catalogue = (() => {
     for (const row of raw.cards) counts[row[0]]++;
     return raw.sets
       .map((set, i) => ({
-        id: set[0], code: set[1], name: set[3], releaseDate: set[4] || "", langs: set[5] || [], cards: counts[i],
+        id: set[0], code: set[1] || "", name: set[3] || set[1] || set[0], releaseDate: set[4] || "", langs: set[5] || [], cards: counts[i],
+        official: set[2], series: set[6], source: set[7],
       }))
       .filter((set) => set.cards > 0)
       .sort((a, b) => (a.releaseDate < b.releaseDate ? 1 : a.releaseDate > b.releaseDate ? -1 : 0));
+  }
+
+  /** The cards of one expansion in number order, as card objects. */
+  function cardsOfSet(setId) {
+    if (!index) return [];
+    const raw = index.raw;
+    const setIndex = raw.sets.findIndex((set) => set[0] === setId);
+    const out = [];
+    if (setIndex < 0) return out;
+    raw.cards.forEach((row, i) => { if (row[0] === setIndex) out.push(card(i)); });
+    return out;
+  }
+
+  /** Logo addresses to try for an expansion (from `sets()`), the wanted language first. */
+  function setLogos(set, preferred = null) {
+    const pattern = index && index.raw.image_url_pattern;
+    if (!pattern || !set.series) return [];
+    const langs = IMAGE_LANG_ORDER.filter((lang) => set.langs.includes(lang));
+    if (preferred && langs.includes(preferred)) langs.unshift(...langs.splice(langs.indexOf(preferred), 1));
+    return langs.map((lang) => pattern
+      .replace("{lang}", lang)
+      .replace("{serie}", encodeURIComponent(set.series))
+      .replace("{set}", encodeURIComponent(set.source))
+      .replace("/{number}", "/logo.webp"));
   }
 
   /**
@@ -228,5 +253,5 @@ const Catalogue = (() => {
     return found.slice(0, limit).map(card);
   }
 
-  return { load, info, card, cardByKey, images, parseVariant, links, search, sets, prepared: () => index };
+  return { load, info, card, cardByKey, images, parseVariant, links, search, sets, cardsOfSet, setLogos, prepared: () => index };
 })();

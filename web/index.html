@@ -103,13 +103,9 @@
 
     <!-- Search -->
     <section class="view" id="view-search" hidden>
-      <div class="search"><input id="searchInput" type="search" placeholder="Nome, oppure nome e numero: eevee 54" autocomplete="off" autocapitalize="off"></div>
-      <div class="row" style="gap:8px;margin:8px 0">
-        <select id="searchLang" aria-label="Lingua" style="flex:1"></select>
-        <select id="searchSet" aria-label="Espansione" style="flex:2"></select>
-      </div>
-      <p class="muted small" id="searchInfo" style="margin:0">Cerca in tutte le lingue del catalogo.</p>
-      <div class="list" id="searchResults"></div>
+      <div class="search"><input id="searchInput" type="search" placeholder="Cerca una carta o un'espansione: eevee 54, fossil" autocomplete="off" autocapitalize="off"></div>
+      <div class="chiprow" id="searchLangs"></div>
+      <div id="searchBody" class="searchbody"></div>
     </section>
 
     <!-- Card page -->
