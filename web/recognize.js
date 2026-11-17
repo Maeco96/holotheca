@@ -8,6 +8,36 @@
 
   const TOP_ZONE = 0.24; // name, stage and HP sit in the top quarter on every era
   const BOTTOM_ZONE = 0.78; // set code, collector number and copyright sit below this
+  const BARE_NUMBER_ZONE = 0.85; // a promo number without a total sits on the very last lines
+
+  // Words printed on every card of a language (weakness, resistance, retreat, trainer, evolves
+  // from), normalised. Used to tell the language of the copy in hand.
+  const LANGUAGE_WORDS = {
+    it: ["debolezza", "resistenza", "ritirata", "allenatore", "sievolveda", "evolveda", "energiabase"],
+    en: ["weakness", "retreat", "trainer", "evolvesfrom", "basicpokemon", "basicenergy"],
+    fr: ["faiblesse", "retraite", "dresseur", "evolutionde", "energiedebase"],
+    de: ["schwache", "resistenz", "ruckzug", "entwickeltsichaus", "basisenergie"],
+    es: ["debilidad", "retirada", "entrenador", "evolucionade", "energiabasica"],
+    pt: ["fraqueza", "recuo", "treinador", "evoluide", "energiabasica"],
+  };
+
+  /** Language of the card from the text read on it, or null when it cannot be told. */
+  function detectLanguage(texts) {
+    const all = texts.join(" ");
+    if (/[\u3040-\u30ff]/.test(all)) return "ja";
+    if (/[\uac00-\ud7af]/.test(all)) return "ko";
+    if (/[\u0e00-\u0e7f]/.test(all)) return "th";
+    const key = normalize(all);
+    let best = null;
+    let bestHits = 0;
+    let tie = false;
+    for (const [lang, words] of Object.entries(LANGUAGE_WORDS)) {
+      const hits = words.filter((word) => key.includes(word)).length;
+      if (hits > bestHits) { best = lang; bestHits = hits; tie = false; }
+      else if (hits === bestHits && hits > 0) tie = true;
+    }
+    return bestHits > 0 && !tie ? best : null;
+  }
 
   // Start of the "Evolves from ..." line in the languages of the catalogue, normalised.
   const EVOLVES_FROM = /^(evolvesfrom|sievolveda|evolutionde|entwickeltsichaus|evolucionade|evoluide|evoluciona|evolvefrom)/;
@@ -100,16 +130,39 @@
       }
     }
 
+    // Copyright years ("©1995, 96, 98 ... 1999-2000 Wizards") are not collector numbers: they are
+    // removed before any loose digit matching, where "1995" once passed for card 1 of a 9-card set.
+    const withoutYears = (text) => text
+      .replace(/(?:19|20)\d{2}(?:\s*[-,]\s*\d{2,4})*/g, " ");
     const bottomText = bottom.map((item) => item.text).join(" ");
+    const bottomClean = withoutYears(bottomText);
+
+    // Promo cards print a bare number with no total ("... GAMEFREAK 46"): numbers standing alone
+    // on the lowest lines, not a level, a Pokédex number or a year.
+    const bareNumbers = [];
+    for (const item of items.filter((it) => it.cy > BARE_NUMBER_ZONE)) {
+      const text = withoutYears(item.text).replace(/(?:#|\b(?:n|no|nr|lv|liv|ly|niv)\b)\s*\.?\s*\d+/gi, " ");
+      for (const match of text.matchAll(/(?<![\d\/×x+\-])\b\d{1,3}\b(?![\d\/])/g)) {
+        const number = normalizeNumber(match[0]);
+        if (!bareNumbers.includes(number)) bareNumbers.push(number);
+      }
+    }
+
+    // Short set codes ("M3", "B2") only count as a whole word on the bottom lines.
+    const bottomTokens = bottomText.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+
     return {
       nameCandidates,
       hp,
       numbers,
       bottomText,
       bottomKey: bottomText.toUpperCase().replace(/[^A-Z0-9]+/g, ""),
-      bottomDigits: digitLike(bottomText).replace(/[^0-9/]+/g, ""),
-      bottomFuzzy: digitLike(bottomText).toUpperCase().replace(/[^A-Z0-9/]+/g, ""),
+      bottomDigits: digitLike(bottomClean).replace(/[^0-9/]+/g, ""),
+      bottomFuzzy: digitLike(bottomClean).toUpperCase().replace(/[^A-Z0-9/]+/g, ""),
       looseNumbers,
+      bareNumbers,
+      bottomTokens,
+      language: detectLanguage(items.map((item) => item.text)),
       allKeys: items.map((item) => normalize(item.text)).filter((key) => key.length >= 6),
       lines: items,
     };
@@ -237,7 +290,9 @@
     // 3. Cards of a set whose printed code was read, with a bare number ("SVE 001").
     const codeSets = [];
     raw.sets.forEach((set, setIndex) => {
-      if (set[1] && set[1].length >= 3 && reading.bottomKey.includes(set[1].toUpperCase())) codeSets.push(setIndex);
+      if (!set[1]) return;
+      const code = set[1].toUpperCase();
+      if (code.length >= 3 ? reading.bottomKey.includes(code) : (reading.bottomTokens || []).includes(code)) codeSets.push(setIndex);
     });
     for (const setIndex of codeSets) {
       for (const cardIndex of bySet.get(setIndex) || []) {
@@ -280,6 +335,10 @@
       } else if (reading.numbers.some((n) => n.number === number)) {
         score += 0.12;
         evidence.push("number");
+      } else if (!reading.numbers.length && found.similarity > 0 && (reading.bareNumbers || []).includes(number)) {
+        // A promo number printed without a total; only trusted together with the name.
+        score += 0.2;
+        evidence.push("number");
       } else if (reading.numbers.some((n) => n.total === official)) {
         score += 0.08;
         evidence.push("total");
@@ -319,5 +378,5 @@
     return results.slice(0, limit);
   }
 
-  return { parse, match, prepareIndex, normalize, normalizeNumber, nameSimilarity, digitLike };
+  return { parse, match, prepareIndex, normalize, normalizeNumber, nameSimilarity, digitLike, detectLanguage };
 });

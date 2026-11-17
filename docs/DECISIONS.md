@@ -40,6 +40,12 @@ One row per decision. Newest last.
 | 2026-11-16 | Scan result shows the most likely card's official TCGdex image large, the other candidates below (tap to bring into focus), then the owner's photo | Owner asked to compare the exact printing against his photo before confirming |
 | 2026-11-16 | Scan log on by default during the beta (`ON_BY_DEFAULT` in web/scanlog.js); the owner can still switch it off | Owner's request: every beta reading should be measurable. Must be turned off when the beta ends |
 | 2026-11-16 | Scan log stores photos as JPEG data URL strings, not Blobs | 0.8.0 log came back empty from Safari private browsing, which refuses Blobs in IndexedDB |
+| 2026-11-17 | Card index schema 3: each printing carries subtype, stamps, foil and size (`type:subtype:stamps:foil:size`), not only the type; stamp names are normalised to slugs | The index dropped everything but the type, so a 1st edition and an unlimited copy could not be told apart. Owner: variants, versions and languages must be exact |
+| 2026-11-17 | The add form lists every printing of the catalogue and preselects the first one without a stamp; owned copies store subtype, stamps, foil and size | A stamp such as 1st edition is never assumed |
+| 2026-11-17 | Card pictures are labelled as a reference image with their language; the scanner prefers the image in the language it read | TCGdex keeps one image per card and language, often an English 1st edition scan: it cannot show the exact printing in hand |
+| 2026-11-17 | The scanner reads the language of the copy from the words printed on every card and prefills it; the add form always offers the main languages; the Cardmarket link carries the language filter | TCGdex's language list per set is incomplete, which saved Italian cards as English |
+| 2026-11-17 | Matching: copyright years are removed before loose digit matching; a bare promo number counts only together with the name; two-letter set codes count as whole words | First real log: 13/14 right first before, 14/14 after (one owner pick corrected by the photo: Mewtwo 10/102 is Base Set, not Base Set 2) |
+| 2026-11-17 | Camera controls (lens, torch, zoom steps) sit on the preview; a stopped or frozen camera restarts when the app returns to the screen and before a reading | Owner's request; the preview froze now and then on iOS |
 
 ## Open
 

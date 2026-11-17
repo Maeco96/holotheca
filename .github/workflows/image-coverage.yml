@@ -1,0 +1,38 @@
+name: Image coverage
+
+# Asks the TCGdex asset server which card images exist, per set and language, and prints a table.
+# The asset server is not reachable from every build environment, so this runs here.
+on:
+  push:
+    paths:
+      - "etl/check_images.py"
+      - ".github/workflows/image-coverage.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build the card index
+        run: |
+          git clone --depth 1 https://github.com/tcgdex/cards-database.git "$RUNNER_TEMP/tcgdex"
+          python3 etl/build_catalogue.py "$RUNNER_TEMP/tcgdex" --out "$RUNNER_TEMP/catalogue.sqlite"
+          python3 etl/export_scan_index.py "$RUNNER_TEMP/catalogue.sqlite" --out "$RUNNER_TEMP/scan-index.json"
+      - name: Ask for the images
+        run: |
+          python3 etl/check_images.py "$RUNNER_TEMP/scan-index.json" --out "$RUNNER_TEMP/tcgdex-images.md" \
+            --card base2-54 --card base2-8 --card base1-10 --card basep-46 --card M3-008 --card M3-017 \
+            --card 30th-115 --card me02-087 --card sv03-223
+          cat "$RUNNER_TEMP/tcgdex-images.md" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tcgdex-images
+          path: ${{ runner.temp }}/tcgdex-images.md

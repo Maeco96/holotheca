@@ -22,6 +22,8 @@ CREATE TABLE owned_copies (
     variant_type      TEXT NOT NULL,
     variant_subtype   TEXT,
     variant_stamps    TEXT,
+    variant_foil      TEXT,
+    variant_size      TEXT,
     variant_confirmed INTEGER NOT NULL DEFAULT 0 CHECK (variant_confirmed IN (0, 1)),
     condition         TEXT,                -- 'MT','NM','EX','GD','LP','PL','PO'; NULL for graded copies
     quantity          INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),

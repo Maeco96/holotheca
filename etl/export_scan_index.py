@@ -14,7 +14,10 @@ Layout (arrays, to stay small; `schema` is bumped when positions change):
   cards: [[set_index, number, hp, [name_index, ...], illustrator_index, rarity_index, category,
            cardmarket_id, tcgplayer_id, cardtrader_id, variants]]
          category is "P", "T" or "E"; missing indexes are -1 and missing ids are 0;
-         variants is "normal,holo" and ends with "?" when the ETL inferred it.
+         variants lists every printing the catalogue knows, comma-separated, each one as
+         "type:subtype:stamps:foil:size" with trailing empty parts dropped and stamps joined
+         by "+": "normal,normal::1st-edition", "holo:shadowless", "holo:::cosmos". It ends
+         with "?" when the ETL inferred it from the rarity.
 Standard library only.
 """
 from __future__ import annotations
@@ -25,6 +28,18 @@ import sqlite3
 from pathlib import Path
 
 DISPLAY_LANGS = ("en", "it", "ja")
+
+
+def variant_token(kind, subtype, stamps, foil, size) -> str:
+    """One printing as "type:subtype:stamps:foil:size", trailing empty parts dropped."""
+    def clean(value) -> str:
+        return "".join(ch for ch in str(value or "").strip().lower().replace(" ", "-") if ch not in ",:+?")
+
+    stamp_part = "+".join(filter(None, (clean(s) for s in str(stamps or "").split(","))))
+    parts = [clean(kind) or "normal", clean(subtype), stamp_part, clean(foil), "" if size in (None, "", "standard") else clean(size)]
+    while len(parts) > 1 and not parts[-1]:
+        parts.pop()
+    return ":".join(parts)
 
 
 def export(database: Path, out: Path) -> dict:
@@ -73,10 +88,13 @@ def export(database: Path, out: Path) -> dict:
 
     variants: dict[int, list[str]] = {}
     inferred: set[int] = set()
-    for card_id, kind, guessed in db.execute("SELECT card_id, type, inferred FROM variants ORDER BY card_id, id"):
+    for card_id, kind, subtype, stamps, foil, size, guessed in db.execute(
+        "SELECT card_id, type, subtype, stamps, foil, size, inferred FROM variants ORDER BY card_id, id"
+    ):
         bucket = variants.setdefault(card_id, [])
-        if kind not in bucket:
-            bucket.append(kind)
+        token = variant_token(kind, subtype, stamps, foil, size)
+        if token not in bucket:
+            bucket.append(token)
         if guessed:
             inferred.add(card_id)
 
@@ -115,7 +133,7 @@ def export(database: Path, out: Path) -> dict:
     db.close()
 
     index = {
-        "schema": 2,
+        "schema": 3,
         "image_url_pattern": meta.get("image_url_pattern"),
         "built_at": meta.get("built_at"),
         "tcgdex_revision": meta.get("tcgdex_revision"),
