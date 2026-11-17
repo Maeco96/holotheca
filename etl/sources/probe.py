@@ -13,19 +13,12 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Second pass: coverage of the gaps and hotlinking
-    "https://www.pokemon-card.com/card-search/resultAPI.php?keyword=&se_ta=&regulation_sidebar_form=all&pg=&illust=&sm_and_keyword=true&expansion=M3",
-    "https://www.pokemon-card.com/card-search/index.php?mode=statuslist&pg=M3",
-    "https://www.pokemon-card.com/card-search/details.php/card/1056/regu/all",
-    "https://www.pokemon-card.com/assets/images/card_images/large/DP1/001056_P_SONANSU.jpg#referer=https://maeco96.github.io/",
-    "https://www.pokemon-card.com/ex/m3/",
-    "https://www.pokemon-card.com/products/",
-    "https://pokemoncard.co.kr/cards/detail/BS2026006001",
-    "https://pokemoncard.co.kr/public-assets/home/data/cards.image_www/data/wmimages/MEGA/M6a/M6a_001.webp#referer=https://maeco96.github.io/",
-    "https://pokemoncard.co.kr/terms",
-    "https://asia.pokemon-card.com/tw/card-search/list/?expansionCodes=M3",
-    "https://asia.pokemon-card.com/tw/policy/",
-    "https://www.pokemon.com/it/gcc/archivio-carte?cardName=Jigglypuff",
+    # Third pass: what a modern detail page holds (set, number, rarity), and the list paging
+    "https://www.pokemon-card.com/card-search/details.php/card/50813/regu/all#raw",
+    "https://www.pokemon-card.com/card-search/resultAPI.php?keyword=&regulation_sidebar_form=all&pg=2#raw",
+    "https://pokemoncard.co.kr/cards/detail/BS2026006001#raw",
+    "https://asia.pokemon-card.com/tw/card-search/detail/17978/#raw",
+    "https://www.pokemonkorea.co.kr/terms",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
@@ -71,9 +64,14 @@ def fetch(url):
 
 
 def show(url):
+    raw = url.endswith("#raw")
+    url = url.removesuffix("#raw")
     status, ctype, final, body = fetch(url)
     print(f"\n=== {url}\n  status {status}  type {ctype}  bytes {len(body)}" + (f"  -> {final}" if final != url else ""))
     if not body:
+        return
+    if raw and "json" in ctype:
+        print(body.decode("utf-8", "replace")[:1500])
         return
     if url.endswith(TEXT_KINDS) or "json" in ctype or "text/plain" in ctype:
         print(body.decode("utf-8", "replace")[:6000])
@@ -81,6 +79,11 @@ def show(url):
     if "html" not in ctype:
         return
     html = body.decode("utf-8", "replace")
+    if raw:
+        main = re.sub(r"<script.*?</script>|<style.*?</style>|<head.*?</head>", "", html, flags=re.S | re.I)
+        main = re.sub(r"\n\s*\n+", "\n", main)
+        print(main[:30000])
+        return
     title = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
     print("  title:", (title.group(1).strip() if title else "-")[:200])
     imgs = sorted(set(re.findall(r"""["'(]([^"'()\s]*(?:card|Card)[^"'()\s]*\.(?:png|jpg|jpeg|webp))""", html)))
