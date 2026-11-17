@@ -198,8 +198,10 @@ def tw_detail(client, card_id):
     m = re.search(r'<h1 class="pageHeader cardDetail">(.*?)</h1>', page, re.S)
     if m:
         # the heading holds the stage ("基礎", "1階進化", ...) before the name
-        rec["stage"], _, name = re.sub(r"\s+", " ", text(m.group(1))).rpartition(" ")
-        rec["name"] = name or None
+        full = re.sub(r"\s+", " ", text(m.group(1)))
+        stage = re.match(r"^(基礎|\S*進化|復原|TAG TEAM|V-UNION)\s+", full)
+        rec["stage"] = stage.group(1) if stage else None
+        rec["name"] = full[stage.end():] if stage else full
     m = re.search(r'<section class="expansionColumn">(.*?)</section>', page, re.S)
     if m:
         block = m.group(1)
