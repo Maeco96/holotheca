@@ -161,6 +161,9 @@ def ko_list(client, log, max_pages=None):
             except json.JSONDecodeError:
                 raise RuntimeError(f"ko: the load-more answer is not JSON: {(body or '')[:200]!r}")
             rows = data.get("result") or []
+            if isinstance(rows, dict):  # the server sends an object keyed by position
+                rows = list(rows.values())
+            rows = [r for r in rows if isinstance(r, dict) and r.get("CardNum")]
             if not rows or int(data.get("count") or 0) == 0:
                 if pages == 0:
                     log(f"ko: kind {kind} answered {(body or '')[:300]!r}")
