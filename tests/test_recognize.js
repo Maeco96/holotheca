@@ -119,3 +119,49 @@ test("helpers", () => {
   assert.strictEqual(R.nameSimilarity("mew", "mewtwo"), 1);
   assert.strictEqual(R.nameSimilarity("pikachu", "gothita"), 0);
 });
+
+// Cases from the owner's first scan log (2026-11-16).
+const vintage = R.prepareIndex({
+  names: ["Electabuzz", "Mewtwo", "Spewpa"],
+  illustrators: ["Miki Tanaka", "Ounishi"],
+  sets: [
+    ["basep", null, 53, "Wizards Black Star Promos", "1999-07-01", ["en"]],
+    ["bog", null, 9, "Best of game", "2002-12-01", ["en"]],
+    ["M3", "M3", 80, "Munikis Zero", "2026-01-23", ["ja"]],
+    ["MX", "MX", 80, "Inferno X", "2026-01-23", ["ja"]],
+  ],
+  cards: [[0, "46", 60, [0], 0], [1, "1", 70, [0], -1], [2, "008", 80, [2], 1], [3, "008", 70, [1], -1]],
+});
+
+test("promo with a bare number: copyright years are not a collector number", () => {
+  const reading = R.parse([
+    line("Electabuzz 60 HP", 100, 120),
+    line("Basic Pokemon", 100, 170),
+    line("cause major blackouts in cities. Ly. 22 #125", 100, 1200),
+    line("1995-2000 Nintendo,Creatures,GAMEFREAK 46", 100, 1250, 700),
+    line("Illus. Miki Tanaka", 100, 1255),
+  ], W, H);
+  assert.deepStrictEqual(reading.bareNumbers, ["46"]);
+  const candidates = R.match(vintage, reading, 5);
+  assert.strictEqual(candidates[0].setId, "basep");
+  assert.ok(candidates[0].evidence.includes("number"));
+  // "1995" no longer reads as card 1 of a 9-card set.
+  assert.ok(!candidates.find((c) => c.setId === "bog").evidence.some((e) => e.startsWith("number")));
+});
+
+test("a two-letter set code counts only as a whole word", () => {
+  const reading = R.parse([line("HP80", 700, 80), line("Illus. Ounishi", 60, 1240), line("J M3 008/080 C", 60, 1290)], W, H);
+  const candidates = R.match(vintage, reading, 5);
+  assert.strictEqual(candidates[0].setId, "M3");
+  assert.ok(candidates[0].evidence.includes("set code"));
+  assert.ok(!candidates[1].evidence.includes("set code"));
+});
+
+test("language of the copy in hand", () => {
+  assert.strictEqual(R.detectLanguage(["debolezza resistenza costo di ritirata"]), "it");
+  assert.strictEqual(R.detectLanguage(["weakness resistance retreat cost"]), "en");
+  assert.strictEqual(R.detectLanguage(["Faiblesse Résistance Retraite"]), "fr");
+  assert.strictEqual(R.detectLanguage(["Schwäche Resistenz Rückzug"]), "de");
+  assert.strictEqual(R.detectLanguage(["コフーライ", "008/080"]), "ja");
+  assert.strictEqual(R.detectLanguage(["Pidgeot 80"]), null);
+});

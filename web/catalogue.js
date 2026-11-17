@@ -62,6 +62,7 @@ const Catalogue = (() => {
       cardmarketId: row[7] || null,
       tcgplayerId: row[8] || null,
       cardtraderId: row[9] || null,
+      // Every printing the catalogue knows, as "type:subtype:stamps:foil:size" (see parseVariant).
       variants: kinds.replace("?", "").split(",").filter(Boolean),
       variantsInferred: kinds.endsWith("?"),
       set: {
@@ -76,29 +77,45 @@ const Catalogue = (() => {
     return card(byKey.get(key));
   }
 
-  /** Image addresses to try in order: Italian first, then English, then the set's other languages. */
-  function imageUrls(c, quality = "low") {
+  /**
+   * Images to try in order, as [{ url, lang }]: the wanted language first, then Italian,
+   * English and the set's other languages. The picture is a reference for the card, not for
+   * the exact printing: the source keeps one image per card and language.
+   */
+  function images(c, quality = "low", preferred = null) {
     const pattern = index.raw.image_url_pattern;
     if (!pattern || !c.set.seriesSource) return [];
     const langs = IMAGE_LANG_ORDER.filter((lang) => c.set.langs.includes(lang));
-    return langs.map((lang) =>
-      pattern
+    if (preferred && langs.includes(preferred)) langs.unshift(...langs.splice(langs.indexOf(preferred), 1));
+    return langs.map((lang) => ({
+      lang,
+      url: pattern
         .replace("{lang}", lang)
         .replace("{serie}", encodeURIComponent(c.set.seriesSource))
         .replace("{set}", encodeURIComponent(c.set.source))
-        .replace("{number}", encodeURIComponent(c.number)) + `/${quality}.webp`
-    );
+        .replace("{number}", encodeURIComponent(c.number)) + `/${quality}.webp`,
+    }));
   }
 
+  /** One printing from its index token "type:subtype:stamps:foil:size". */
+  function parseVariant(token) {
+    const [type = "normal", subtype = "", stamps = "", foil = "", size = ""] = String(token || "normal").split(":");
+    return { token: String(token || "normal"), type: type || "normal", subtype: subtype || null, stamps: stamps ? stamps.split("+") : [], foil: foil || null, size: size || null };
+  }
+
+  // Cardmarket's language filter on a product page.
+  const CARDMARKET_LANGUAGE = { en: 1, fr: 2, de: 3, es: 4, it: 5, "zh-cn": 6, ja: 7, pt: 8, ru: 9, ko: 10, "zh-tw": 11 };
+
   /** Marketplace pages. Product pages when the catalogue knows the id, else a name search. */
-  function links(c) {
+  function links(c, lang = null) {
     const query = encodeURIComponent(`${c.name} ${c.number}`);
+    const language = CARDMARKET_LANGUAGE[lang] ? `&language=${CARDMARKET_LANGUAGE[lang]}` : "";
     return [
       {
         label: "Cardmarket",
         url: c.cardmarketId
-          ? `https://www.cardmarket.com/it/Pokemon/Products?idProduct=${c.cardmarketId}`
-          : `https://www.cardmarket.com/it/Pokemon/Products/Search?searchString=${encodeURIComponent(c.name)}`,
+          ? `https://www.cardmarket.com/it/Pokemon/Products?idProduct=${c.cardmarketId}${language}`
+          : `https://www.cardmarket.com/it/Pokemon/Products/Search?searchString=${encodeURIComponent(c.name)}${language}`,
         exact: Boolean(c.cardmarketId),
       },
       {
@@ -151,5 +168,5 @@ const Catalogue = (() => {
     return found.slice(0, limit).map(card);
   }
 
-  return { load, info, card, cardByKey, imageUrls, links, search, prepared: () => index };
+  return { load, info, card, cardByKey, images, parseVariant, links, search, prepared: () => index };
 })();

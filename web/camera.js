@@ -10,7 +10,8 @@ const Camera = (() => {
   let track = null;
   let torchOn = false;
   let lensChosenByUser = false;
-  let els = null; // { video, frame, lens, zoom, zoomValue, zoomRow, torch, onError }
+  let els = null; // { video, frame, lens, zoomRow, torch, onError, onLost }
+  const ZOOM_STEPS = [1, 1.5, 2, 3, 5];
 
   function bind(elements) {
     els = elements;
@@ -54,6 +55,17 @@ const Camera = (() => {
     els.video.srcObject = stream;
     await els.video.play();
     track = stream.getVideoTracks()[0];
+    // iOS ends or mutes the camera when the app goes to the background, a call comes in or
+    // another app takes the camera; the preview then stays frozen on the last frame.
+    const mine = track;
+    const lost = () => setTimeout(() => { if (track === mine && els.onLost) els.onLost(); }, 500);
+    mine.addEventListener("ended", lost);
+    mine.addEventListener("mute", lost);
+  }
+
+  /** True when the preview really delivers frames: live, not muted, video playing. */
+  function healthy() {
+    return running() && !track.muted && !els.video.paused && els.video.readyState >= 2;
   }
 
   function stop() {
@@ -68,23 +80,31 @@ const Camera = (() => {
     const caps = track.getCapabilities ? track.getCapabilities() : {};
     let settings = track.getSettings();
 
+    els.zoomRow.innerHTML = "";
     if (caps.zoom && typeof caps.zoom.max === "number") {
-      els.zoom.min = caps.zoom.min;
-      els.zoom.max = Math.min(caps.zoom.max, 6);
-      els.zoom.step = caps.zoom.step || 0.1;
+      const max = Math.min(caps.zoom.max, 6);
       // A little zoom lets the phone stay about 20 cm away, where the main lens focuses well.
       const wanted = Math.min(Math.max(2, caps.zoom.min), caps.zoom.max);
       if (!settings.zoom || settings.zoom < wanted) {
         await applyAdvanced({ zoom: wanted });
         settings = track.getSettings();
       }
-      els.zoom.value = settings.zoom || wanted;
-      els.zoomValue.textContent = Number(els.zoom.value).toFixed(1) + "x";
-      els.zoomRow.hidden = false;
-      els.zoom.oninput = async () => {
-        els.zoomValue.textContent = Number(els.zoom.value).toFixed(1) + "x";
-        await applyAdvanced({ zoom: Number(els.zoom.value) });
+      const current = settings.zoom || wanted;
+      const steps = ZOOM_STEPS.filter((z) => z >= caps.zoom.min && z <= max);
+      const mark = (value) => {
+        for (const b of els.zoomRow.children) b.classList.toggle("on", Math.abs(Number(b.dataset.zoom) - value) < 0.05);
       };
+      for (const step of steps) {
+        const button = document.createElement("button");
+        button.className = "cambtn";
+        button.dataset.zoom = String(step);
+        button.textContent = `${step}x`;
+        button.setAttribute("aria-label", `Zoom ${step}x`);
+        button.onclick = async () => { if (await applyAdvanced({ zoom: step })) mark(step); };
+        els.zoomRow.appendChild(button);
+      }
+      mark(current);
+      els.zoomRow.hidden = steps.length < 2;
     } else {
       els.zoomRow.hidden = true;
     }
@@ -119,6 +139,7 @@ const Camera = (() => {
     els.lens.innerHTML = "";
     for (const d of devices) els.lens.add(new Option(d.label || "Fotocamera", d.deviceId));
     els.lens.value = track.getSettings().deviceId || "";
+    els.lens.hidden = devices.length < 2;
     els.lens.onchange = () => {
       lensChosenByUser = true;
       start(els.lens.value).catch((e) => els.onError(`${e.name}: ${e.message}`));
@@ -203,5 +224,5 @@ const Camera = (() => {
     return best;
   }
 
-  return { bind, start, stop, running, describe, captureSharpest, preferredLens, sharpness };
+  return { bind, start, stop, running, healthy, describe, captureSharpest, preferredLens, sharpness };
 })();

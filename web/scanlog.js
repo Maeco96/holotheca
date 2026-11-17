@@ -12,8 +12,15 @@ const ScanLog = (() => {
   let dbPromise = null;
   let lastError = null;
 
+  // BETA: the log is on unless the owner switched it off. Set back to false when the beta ends
+  // (see docs/DECISIONS.md, "Open").
+  const ON_BY_DEFAULT = true;
+
   function enabled() {
-    try { return localStorage.getItem(FLAG) === "1"; } catch (e) { return false; }
+    try {
+      const flag = localStorage.getItem(FLAG);
+      return flag === null ? ON_BY_DEFAULT : flag === "1";
+    } catch (e) { return false; }
   }
 
   function setEnabled(on) {

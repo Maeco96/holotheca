@@ -1,9 +1,47 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.8.1";
+const VERSION = "0.9.0";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
+// Printing details from the catalogue; anything not listed is shown as the catalogue writes it.
+const SUBTYPE_LABELS = {
+  shadowless: "Shadowless", unlimited: "Unlimited", "1999-2000-copyright": "copyright 1999-2000",
+  "no-rarity": "senza simbolo rarità", "no-e-reader": "senza e-Reader", "missing-expansion-symbol": "senza simbolo espansione",
+  "blue-border": "bordo blu", "japanese-back": "retro giapponese",
+};
+const STAMP_LABELS = {
+  "1st-edition": "1ª edizione", "set-logo": "timbro logo espansione", staff: "Staff", "pre-release": "Prerelease",
+  "w-promo": "timbro W", "30th-anniversary": "timbro 30° anniversario", "25th-celebration": "timbro 25° anniversario",
+  "player-rewards-program": "Player Rewards", "professor-program": "Professor Program", winner: "Winner",
+  "pokemon-center": "Pokémon Center", mcdonalds: "McDonald's", snowflake: "fiocco di neve",
+};
+const FOIL_LABELS = {
+  cosmos: "foil cosmos", pokeball: "foil Poké Ball", masterball: "foil Master Ball", energy: "foil energia",
+  "cracked-ice": "foil cracked ice", rainbow: "foil arcobaleno", gold: "foil oro", league: "foil lega", galaxy: "foil galaxy",
+};
+const MAIN_LANGS = ["it", "en", "fr", "de", "es", "pt", "ja", "ko", "zh-tw", "zh-cn", "th", "id"];
+
+/** A printing in words: "Normale · 1ª edizione", "Holo · Shadowless". Takes a parsed variant. */
+function variantLabel(v) {
+  const plain = (slug) => String(slug).replace(/-/g, " ");
+  return [
+    VARIANT_LABELS[v.type] || v.type,
+    v.subtype ? SUBTYPE_LABELS[v.subtype] || plain(v.subtype) : null,
+    ...(v.stamps || []).map((s) => STAMP_LABELS[s] || `timbro ${plain(s)}`),
+    v.foil ? FOIL_LABELS[v.foil] || `foil ${plain(v.foil)}` : null,
+    v.size ? (v.size === "jumbo" ? "Jumbo" : plain(v.size)) : null,
+  ].filter(Boolean).join(" · ");
+}
+
+/** The printing stored on an owned copy, as a parsed variant. */
+function copyVariant(copy) {
+  return {
+    type: copy.variant_type || "normal", subtype: copy.variant_subtype || null,
+    stamps: copy.variant_stamps ? String(copy.variant_stamps).split(",") : [],
+    foil: copy.variant_foil || null, size: copy.variant_size || null,
+  };
+}
 const LANG_LABELS = {
   it: "Italiano", en: "Inglese", fr: "Francese", de: "Tedesco", es: "Spagnolo", pt: "Portoghese",
   "pt-br": "Portoghese (BR)", ja: "Giapponese", ko: "Coreano", "zh-tw": "Cinese trad.", "zh-cn": "Cinese sempl.",
@@ -47,26 +85,56 @@ function formatDate(iso) {
 }
 
 /** Card artwork that tries each image address in turn and falls back to the card name. */
-function art(card, { big = false, quality = "low" } = {}) {
+function art(card, { big = false, quality = "low", lang = null, onImage = null } = {}) {
   const box = el("div", { class: big ? "art big" : "art" });
   const placeholder = el("div", { class: "ph", text: card ? card.name : "?" });
   box.appendChild(placeholder);
   if (!card) return box;
-  const urls = Catalogue.imageUrls(card, quality);
+  const images = Catalogue.images(card, quality, lang);
+  const urls = images.map((image) => image.url);
   let attempt = 0;
-  if (!urls.length) return box;
+  if (!urls.length) { if (onImage) onImage(null); return box; }
   // The image sits in the box from the start, transparent until loaded: a lazy image that is
   // not in the document is never fetched, which left every card on its placeholder up to 0.8.0.
   const img = el("img", { alt: card.name, loading: "lazy", decoding: "async", class: "loading" });
-  img.addEventListener("load", () => { img.classList.remove("loading"); placeholder.remove(); });
+  img.addEventListener("load", () => {
+    img.classList.remove("loading");
+    placeholder.remove();
+    if (onImage) onImage(images[attempt].lang);
+  });
   img.addEventListener("error", () => {
     attempt += 1;
     if (attempt < urls.length) img.src = urls[attempt];
+    else if (onImage) onImage(null);
   });
   img.src = urls[0];
   box.appendChild(img);
   return box;
 }
+
+/**
+ * A line under a large card image saying what the picture is: the catalogue has one image per
+ * card and language, so it can show another printing (a 1st edition stamp, a different foil)
+ * or another language than the copy in hand.
+ */
+function imageNote(card, wantedLang) {
+  const note = el("div", { class: "muted small imgnote", text: "Carico l'immagine…" });
+  const several = card.variants.length > 1 || card.variants.some((token) => token.includes(":"));
+  const onImage = (lang) => {
+    if (!lang) {
+      note.textContent = "Il catalogo non ha un'immagine di questa carta: confrontala con i dati qui sotto.";
+      return;
+    }
+    const language = (LANG_LABELS[lang] || lang).toLowerCase();
+    const other = wantedLang && wantedLang !== lang ? ` (manca quella in ${(LANG_LABELS[wantedLang] || wantedLang).toLowerCase()})` : "";
+    note.textContent = `Immagine di riferimento in ${language}${other}.` +
+      (several ? " Può mostrare un'altra versione, per esempio con il timbro 1ª edizione: la versione la scegli tu." : "");
+  };
+  return { note, onImage };
+}
+
+// What the last scan read about the copy in hand, used to prefill the card page.
+let scanContext = null; // { key, lang }
 
 function cardLine(card) {
   const total = card.set.official ? `/${card.set.official}` : "";
@@ -152,9 +220,26 @@ function scanError(message) {
 }
 
 Camera.bind({
-  video: $("video"), frame: $("frame"), lens: $("lens"), zoom: $("zoom"),
-  zoomValue: $("zoomVal"), zoomRow: $("zoomRow"), torch: $("torch"), onError: scanError,
+  video: $("video"), frame: $("frame"), lens: $("lens"), zoomRow: $("zoomRow"), torch: $("torch"),
+  onError: scanError, onLost: () => recoverCamera(),
 });
+
+/**
+ * Brings a frozen preview back: iOS stops the camera when the app leaves the screen, and the
+ * picture then stays on its last frame. Runs when the app becomes visible again, when the
+ * camera reports that it stopped, and before every reading.
+ */
+let recovering = null;
+function recoverCamera() {
+  if (!cameraWanted || document.hidden || $("view-scan").hidden || Camera.healthy()) return Promise.resolve();
+  if (!recovering) {
+    $("scanStatus").textContent = "Riavvio la fotocamera…";
+    recovering = startCamera().finally(() => { recovering = null; });
+  }
+  return recovering;
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(recoverCamera, 300); });
+window.addEventListener("pageshow", () => setTimeout(recoverCamera, 300));
 
 async function startCamera() {
   scanError("");
@@ -163,7 +248,7 @@ async function startCamera() {
     await Camera.start();
     cameraWanted = true;
     $("shutter").disabled = false;
-    $("camPanel").hidden = false;
+    $("scanStatus").textContent = "Inquadra la carta e tocca il pulsante.";
     $("cameraInfo").textContent = Camera.describe();
   } catch (e) {
     $("startCamera").hidden = false;
@@ -174,7 +259,7 @@ async function startCamera() {
 
 function enterScan() {
   // Once the owner has started the camera, coming back to this tab restarts it.
-  if (cameraWanted && !Camera.running()) startCamera();
+  if (cameraWanted && !Camera.healthy()) startCamera();
 }
 
 function loadScript(src) {
@@ -234,7 +319,12 @@ function showScan(canvas, outcome) {
   // The card in focus is shown large with its official image, so it can be compared with
   // the photo below; tapping another candidate brings that one into focus.
   let focus = 0;
-  const openCard = (card) => { ScanLog.choose(currentLogId, card.key); location.hash = `#/carta/${encodeURIComponent(card.key)}`; };
+  const readLang = reading.language || null;
+  const openCard = (card) => {
+    ScanLog.choose(currentLogId, card.key);
+    scanContext = { key: card.key, lang: readLang };
+    location.hash = `#/carta/${encodeURIComponent(card.key)}`;
+  };
   const percentOf = (candidate) => Math.round(candidate.score * 100);
   const evidenceOf = (candidate) => `Letto: ${candidate.evidence.map((e) => EVIDENCE_LABELS[e] || e).join(", ") || "nulla"}`;
   const shownOf = (candidate) => {
@@ -255,13 +345,16 @@ function showScan(canvas, outcome) {
     const top = candidates[focus];
     const { card, shown } = shownOf(top);
     const percent = percentOf(top);
+    const { note, onImage } = imageNote(card, readLang);
     hero.appendChild(
       el("div", { class: "hero" },
-        art(shown, { big: true, quality: "high" }),
+        art(shown, { big: true, quality: "high", lang: readLang, onImage }),
+        note,
         el("div", {},
           el("div", { class: "t", text: shown.name }),
           el("div", { class: "s", text: cardLine(card) }),
-          el("div", { class: "s", text: evidenceOf(top) })),
+          el("div", { class: "s", text: evidenceOf(top) }),
+          readLang ? el("div", { class: "s", text: `Lingua letta: ${LANG_LABELS[readLang] || readLang}` }) : null),
         el("span", { class: percent >= 75 ? "badge good" : "badge warn", text: `${percent}%` }),
         el("button", { class: "btn primary", text: "È questa: apri la scheda", onclick: () => openCard(card) }))
     );
@@ -271,7 +364,7 @@ function showScan(canvas, outcome) {
       const p = percentOf(candidate);
       list.appendChild(
         el("button", { class: "item", onclick: () => { focus = i; render(); $("scanHero").scrollIntoView({ behavior: "smooth", block: "start" }); } },
-          art(other.shown),
+          art(other.shown, { lang: readLang }),
           el("div", { class: "grow" },
             el("div", { class: "t", text: other.shown.name }),
             el("div", { class: "s", text: cardLine(other.card) }),
@@ -318,6 +411,7 @@ async function captureAndRead() {
   shutter.classList.add("busy");
   scanError("");
   try {
+    await recoverCamera();
     $("scanStatus").textContent = "Scatto…";
     const card = await Camera.captureSharpest();
     $("scanStatus").textContent = "Leggo la carta…";
@@ -420,7 +514,7 @@ function ownedPanel(card) {
   const binderName = (id) => (Store.binders().find((b) => b.id === id) || {}).name;
   for (const copy of copies) {
     const details = [
-      VARIANT_LABELS[copy.variant_type] || copy.variant_type,
+      variantLabel(copyVariant(copy)),
       LANG_LABELS[copy.lang] || copy.lang,
       copy.condition,
       binderName(copy.binder_id),
@@ -438,25 +532,43 @@ function ownedPanel(card) {
   return panel;
 }
 
-function addPanel(card) {
-  const kinds = [...new Set([...card.variants, "normal", "holo", "reverse"])];
-  const variant = select(kinds.map((k) => [k, VARIANT_LABELS[k] || k]), card.variants[0] || "normal");
-  const langs = card.set.langs.length ? card.set.langs : ["it", "en"];
-  const lang = select(langs.map((l) => [l, LANG_LABELS[l] || l]), langs.includes("it") ? "it" : langs[0]);
+function addPanel(card, onLang) {
+  // Every printing the catalogue lists for this card, then the plain types it does not list,
+  // because the catalogue is incomplete. The first printing without a stamp is preselected:
+  // a stamp such as 1st edition is never assumed.
+  const known = card.variants.map(Catalogue.parseVariant);
+  const types = new Set(known.map((v) => v.type));
+  const extra = ["normal", "holo", "reverse"].filter((t) => !types.has(t)).map(Catalogue.parseVariant);
+  const options = [...known, ...extra];
+  const preselected = known.find((v) => !v.stamps.length) || known[0] || options[0];
+  const variant = select(options.map((v) => [v.token, variantLabel(v)]), preselected.token);
+  // The catalogue's language list for a set is incomplete (many older Italian sets are missing),
+  // so the main languages are always offered. A language read by the scanner comes first.
+  const langs = [...new Set([...MAIN_LANGS, ...card.set.langs])];
+  const scanned = scanContext && scanContext.key === card.key ? scanContext.lang : null;
+  const lang = select(langs.map((l) => [l, LANG_LABELS[l] || l]), scanned || (card.set.langs.includes("it") || !card.set.langs.length ? "it" : card.set.langs[0]));
+  lang.addEventListener("change", () => onLang && onLang(lang.value));
+  if (onLang) onLang(lang.value);
   const condition = select([["", "Non indicata"], ...CONDITIONS.map((c) => [c, c])], "NM");
   const binder = select([["", "Nessuno"], ...Store.binders().map((b) => [String(b.id), b.name])], selectedBinder ? String(selectedBinder) : "");
   const price = el("input", { type: "number", inputmode: "decimal", min: "0", step: "0.01", placeholder: "facoltativo" });
   const notes = el("input", { type: "text", maxlength: "200", placeholder: "facoltative" });
-  const variantHint = card.variants.length
-    ? card.variantsInferred ? "Variante dedotta dalla rarità: controlla la carta." : "Controlla la variante sulla carta."
-    : "Il catalogo non indica le varianti di questa carta: scegli tu.";
+  const variantHint = (card.variants.length
+    ? card.variantsInferred ? "Variante dedotta dalla rarità: controlla la carta." : "Variante e versione non le decide lo scanner: controllale sulla carta (timbro 1ª edizione, holo, reverse)."
+    : "Il catalogo non indica le varianti di questa carta: scegli tu.") +
+    (scanned ? ` Lingua letta dalla scansione: ${LANG_LABELS[scanned] || scanned}.` : "");
 
+  const chosen = () => Catalogue.parseVariant(variant.value);
   const add = () => {
     const paid = price.value === "" ? null : Number(price.value);
     Store.addCopy({
       card_source_id: card.key,
       lang: lang.value,
-      variant_type: variant.value,
+      variant_type: chosen().type,
+      variant_subtype: chosen().subtype,
+      variant_stamps: chosen().stamps.join(",") || null,
+      variant_foil: chosen().foil,
+      variant_size: chosen().size,
       variant_confirmed: true, // the owner chose it on this form
       condition: condition.value || null,
       binder_id: binder.value ? Number(binder.value) : null,
@@ -501,20 +613,31 @@ async function renderCard(key) {
     ["Uscita", formatDate(card.set.releaseDate)],
   ].filter(([, value]) => value);
 
+  const scannedLang = scanContext && scanContext.key === card.key ? scanContext.lang : null;
+  const { note, onImage } = imageNote(card, scannedLang);
+  // Shop links follow the language chosen in the form, so Cardmarket opens on that language.
+  const linkBox = el("div", { class: "links" });
+  const showLinks = (lang) => {
+    linkBox.innerHTML = "";
+    for (const link of Catalogue.links(card, lang)) {
+      linkBox.appendChild(el("a", { class: "btn", href: link.url, target: "_blank", rel: "noopener", text: link.exact ? link.label : `${link.label} (ricerca)` }));
+    }
+  };
+
   view.append(
     el("div", { class: "cardhead" },
-      art(card, { big: true, quality: "high" }),
+      art(card, { big: true, quality: "high", lang: scannedLang, onImage }),
+      note,
       el("h2", { text: card.name }),
       el("div", { class: "muted", text: cardLine(card) }),
       others.length ? el("div", { class: "muted small", text: others.slice(0, 6).join(" · ") }) : null),
     el("h2", { text: "Nel tuo scrigno" }),
     ownedPanel(card),
     el("h2", { text: "Aggiungi una copia" }),
-    addPanel(card),
+    addPanel(card, showLinks),
     el("h2", { text: "Prezzi e acquisto" }),
-    el("div", { class: "links" },
-      Catalogue.links(card).map((link) =>
-        el("a", { class: "btn", href: link.url, target: "_blank", rel: "noopener", text: link.exact ? link.label : `${link.label} (ricerca)` }))),
+    linkBox,
+    el("p", { class: "muted small", text: "Cardmarket si apre filtrato sulla lingua scelta qui sopra." }),
     el("h2", { text: "Dati della carta" }),
     el("div", { class: "attrs" },
       attributes.map(([label, value]) => el("div", { class: "attr" }, el("span", { text: label }), el("span", { text: String(value) }))))

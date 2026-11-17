@@ -65,6 +65,20 @@ def join(values) -> str | None:
     return ",".join(str(v) for v in values)
 
 
+def stamp_slugs(values) -> str | None:
+    """Stamps as lowercase slugs: the source writes "1st edition", "1st Edition" and "1st-edition"."""
+    if not values:
+        return None
+    if isinstance(values, str):
+        values = [values]
+    slugs = []
+    for value in values:
+        slug = "-".join(str(value).lower().replace("_", " ").split()).strip("-")
+        if slug and slug not in slugs:
+            slugs.append(slug)
+    return ",".join(slugs) or None
+
+
 def earliest_date(value) -> str | None:
     if isinstance(value, str):
         return value
@@ -256,7 +270,7 @@ class Builder:
                 "VALUES (?, ?, ?, ?, ?, ?, ?, 0)",
                 (
                     card_id, entry.get("type", "normal"), entry.get("subtype"), entry.get("size", "standard"),
-                    join(entry.get("stamp")), entry.get("foil"), join(entry.get("languages")),
+                    stamp_slugs(entry.get("stamp")), entry.get("foil"), join(entry.get("languages")),
                 ),
             )
             self.stats["variants"] += 1

@@ -145,8 +145,12 @@ class BuildTests(unittest.TestCase):
         self.assertEqual([index["names"][i] for i in charizard[3]], ["Charizard", "Dracaufeu"])
         self.assertEqual(index["illustrators"][charizard[4]], "Mitsuhiro Arita")
         self.assertEqual(index["sets"][sets["base1"]][1:3], ["BS", 102])
-        # Schema 2: what the card page needs (set details, category, variants).
-        self.assertEqual(index["schema"], 2)
+        # Schema 3: variants carry subtype, stamps, foil and size, not only the type.
+        self.assertEqual(index["schema"], 3)
+        self.assertEqual(charizard[10], "holo,normal::1st-edition")
+        self.assertEqual(export_scan_index.variant_token("holo", "shadowless", "1st-edition,staff", None, "standard"), "holo:shadowless:1st-edition+staff")
+        self.assertEqual(export_scan_index.variant_token("normal", None, None, "cosmos", "jumbo"), "normal:::cosmos:jumbo")
+        self.assertEqual(build_catalogue.stamp_slugs(["1st Edition", "1st edition"]), "1st-edition")
         self.assertEqual(len(index["sets"][sets["base1"]]), 8)
         self.assertEqual(len(charizard), 11)
         self.assertEqual(charizard[6], "P")

@@ -69,6 +69,12 @@
         <video id="video" playsinline muted autoplay></video>
         <div class="frame" id="frame"></div>
         <div class="hint" id="scanHint">Carta dentro la cornice, telefono a circa 20 cm</div>
+        <!-- Camera controls sit on the preview, as in a camera app; each shows only when the browser offers it. -->
+        <select class="camlens" id="lens" hidden aria-label="Obiettivo"></select>
+        <div class="camside">
+          <button class="cambtn" id="torch" hidden aria-label="Torcia"><svg width="20" height="20"><use href="#i-torch"/></svg></button>
+          <div class="camzoom" id="zoomRow" hidden></div>
+        </div>
         <button class="btn primary start" id="startCamera">Avvia la fotocamera</button>
       </div>
       <button class="shutter" id="shutter" disabled aria-label="Leggi la carta"></button>
@@ -87,14 +93,6 @@
         </div>
       </div>
 
-      <details class="panel" id="camPanel" hidden>
-        <summary>Fotocamera</summary>
-        <div class="camtools" style="margin-top:10px">
-          <label>Obiettivo <select id="lens"></select></label>
-          <label id="zoomRow" hidden>Zoom <span id="zoomVal"></span><input id="zoom" type="range"></label>
-          <button class="btn" id="torch" hidden>Torcia</button>
-        </div>
-      </details>
       <details class="panel" id="readPanel" hidden>
         <summary>Dettagli della lettura</summary>
         <p class="muted small">La foto con le righe di testo trovate.</p>
@@ -135,8 +133,8 @@
           <li>Tocca il pulsante tondo e tieni fermo per un secondo.</li>
           <li>In alto compare in grande l'immagine ufficiale della carta più probabile, sotto le altre possibilità e la tua foto. Confrontale: se è giusta tocca "È questa: apri la scheda", altrimenti tocca un'altra possibilità per vederla in grande.</li>
         </ol>
-        <p class="muted small">Per leggere meglio: luce uniforme, niente riflessi sulla bustina, sfondo scuro e a tinta unita. Se la sala è buia apri "Fotocamera" sotto il risultato e accendi la torcia; lì trovi anche zoom e scelta dell'obiettivo. Se la carta non esce, cercala per nome.</p>
-        <p class="muted small">La percentuale dice quanto il testo letto corrisponde alla carta. La variante (normale, holo, reverse) non la decide mai lo scanner: la scegli tu.</p>
+        <p class="muted small">Per leggere meglio: luce uniforme, niente riflessi sulla bustina, sfondo scuro e a tinta unita. Torcia, zoom e scelta dell'obiettivo sono sopra l'inquadratura: il lampo a destra accende la torcia, sotto ci sono i livelli di zoom, in alto a sinistra l'obiettivo. Se la carta non esce, cercala per nome.</p>
+        <p class="muted small">La percentuale dice quanto il testo letto corrisponde alla carta. La variante (normale, holo, reverse) e la versione (1ª edizione, shadowless, timbri) non le decide mai lo scanner: le scegli tu nella scheda. L'immagine grande è un riferimento preso dal catalogo: può essere in un'altra lingua o mostrare un'altra versione della stessa carta, e sotto c'è scritto quale.</p>
       </div>
 
       <h2>Cercare una carta</h2>
@@ -179,7 +177,7 @@
       <h2>Segnalare una lettura sbagliata</h2>
       <div class="panel">
         <ol>
-          <li>Altro, "Registro delle letture": accendi "Registra ogni lettura".</li>
+          <li>Altro, "Registro delle letture": durante la prova "Registra ogni lettura" è già acceso; se l'hai spento, riaccendilo.</li>
           <li>Scansiona come sempre. Dopo ogni lettura tocca la carta giusta, oppure "Nessuna è quella giusta".</li>
           <li>Quando hai un po' di letture: Altro, "Esporta registro", e manda il file <b>holotheca-letture-data.json</b> a chi segue l'app.</li>
           <li>Con "Svuota" liberi lo spazio.</li>

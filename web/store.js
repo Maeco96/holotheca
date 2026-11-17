@@ -64,6 +64,10 @@ const Store = (() => {
     read();
     const same = state.owned_copies.find((c) =>
       c.card_source_id === copy.card_source_id && c.variant_type === copy.variant_type &&
+      (c.variant_subtype || null) === (copy.variant_subtype || null) &&
+      (c.variant_stamps || null) === (copy.variant_stamps || null) &&
+      (c.variant_foil || null) === (copy.variant_foil || null) &&
+      (c.variant_size || null) === (copy.variant_size || null) &&
       c.lang === copy.lang && (c.condition || null) === (copy.condition || null) &&
       (c.binder_id || null) === (copy.binder_id || null) &&
       (c.purchase_price ?? null) === (copy.purchase_price ?? null));
@@ -78,6 +82,10 @@ const Store = (() => {
       card_source_id: copy.card_source_id,
       lang: copy.lang,
       variant_type: copy.variant_type,
+      variant_subtype: copy.variant_subtype || null,
+      variant_stamps: copy.variant_stamps || null,
+      variant_foil: copy.variant_foil || null,
+      variant_size: copy.variant_size || null,
       variant_confirmed: copy.variant_confirmed ? 1 : 0,
       condition: copy.condition || null,
       quantity: copy.quantity || 1,
