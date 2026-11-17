@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.10.1";
+const VERSION = "0.11.0";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -468,21 +468,51 @@ $("shutter").addEventListener("click", captureAndRead);
 
 let searchTimer = null;
 
+// The language and expansion pickers are filled from the catalogue: an expansion alone lists
+// all its cards, a language keeps only the expansions printed in it.
+function fillSearchFilters() {
+  const langSelect = $("searchLang");
+  const setSelect = $("searchSet");
+  const sets = Catalogue.sets();
+  const langs = [...new Set(sets.flatMap((set) => set.langs))]
+    .sort((a, b) => (LANG_LABELS[a] || a).localeCompare(LANG_LABELS[b] || b, "it"));
+  const lang = langSelect.value;
+  const setId = setSelect.value;
+  langSelect.innerHTML = "";
+  langSelect.add(new Option("Tutte le lingue", ""));
+  for (const code of langs) langSelect.add(new Option(LANG_LABELS[code] || code, code));
+  langSelect.value = lang;
+  setSelect.innerHTML = "";
+  setSelect.add(new Option("Tutte le espansioni", ""));
+  for (const set of sets) {
+    if (langSelect.value && !set.langs.includes(langSelect.value)) continue;
+    const year = set.releaseDate ? ` ${set.releaseDate.slice(0, 4)}` : "";
+    setSelect.add(new Option(`${set.name} (${set.code})${year} · ${set.cards}`, set.id));
+  }
+  setSelect.value = setId;
+  if (setSelect.value !== setId) setSelect.value = "";
+}
+
 async function runSearch() {
   await Catalogue.load();
+  if (Catalogue.prepared() && $("searchSet").options.length === 0) fillSearchFilters();
   const text = $("searchInput").value.trim();
-  const results = Catalogue.search(text);
+  const lang = $("searchLang").value;
+  const setId = $("searchSet").value;
+  const results = Catalogue.search(text, 60, { lang, setId });
   const list = $("searchResults");
   list.innerHTML = "";
+  const where = setId ? " nell'espansione" : "";
   $("searchInfo").textContent = !Catalogue.prepared()
     ? "Catalogo non disponibile: serve la rete al primo avvio."
-    : text.length < 2 ? "Cerca in tutte le lingue del catalogo."
-    : results.length ? `${results.length}${results.length === 60 ? "+" : ""} carte, le più recenti per prime`
+    : !setId && text.length < 2 ? "Cerca in tutte le lingue del catalogo, o scegli un'espansione per vedere tutte le sue carte."
+    : results.length ? (setId && !text ? `${results.length} carte, in ordine di numero`
+      : `${results.length}${results.length === 60 ? "+" : ""} carte${where}, le più recenti per prime`)
     : "Nessuna carta trovata.";
   for (const card of results) {
     list.appendChild(
       el("button", { class: "item", onclick: () => { location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
-        art(card),
+        art(card, { lang: lang || null }),
         el("div", { class: "grow" },
           el("div", { class: "t", text: card.name }),
           el("div", { class: "s", text: cardLine(card) }),
@@ -490,6 +520,9 @@ async function runSearch() {
     );
   }
 }
+
+$("searchLang").addEventListener("change", () => { fillSearchFilters(); runSearch(); });
+$("searchSet").addEventListener("change", runSearch);
 
 $("searchInput").addEventListener("input", () => {
   clearTimeout(searchTimer);
