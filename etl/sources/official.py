@@ -150,12 +150,29 @@ def ko_list(client, log, max_pages=None):
     log(f"ko: {len(seen)} cards on the page, sort {order!r}/{orderby!r}, next offset {start}")
     for kind in (1, 2, 3):
         offset, pages = (start if kind == 1 else 0), 0
+        # The Pokémon tab filters on HP and retreat ranges ("HP >= x AND HP <= y"); the page keeps the
+        # maximums in hidden inputs (hp 380, retreat 5). The range format is not documented, so the
+        # first one the server accepts is kept.
+        ranges = [("", "")] if kind != 1 else [("0,380", "0,5"), ("0;380", "0;5"), ("0-380", "0-5"), ("380", "5")]
+        hp_range, retreat_range = ranges[0]
         while True:
-            body = client.get(f"{KO}/v2/ajax2_dev2", referer=f"{KO}/cards", form={
-                "action": "get_more_cards", "limit": offset, "GoodsName": "", "CardTypeNum": kind,
-                "CardType": "", "CardMonType": "", "Weakness": "", "Resistance": "", "TechErg": "",
-                "ability_label1": "", "hp": "", "retreat": "", "order": order, "orderby": orderby,
-            })
+            def ask(hp, retreat):
+                return client.get(f"{KO}/v2/ajax2_dev2", referer=f"{KO}/cards", form={
+                    "action": "get_more_cards", "limit": offset, "GoodsName": "", "CardTypeNum": kind,
+                    "CardType": "", "CardMonType": "", "Weakness": "", "Resistance": "", "TechErg": "",
+                    "ability_label1": "", "hp": hp, "retreat": retreat, "order": order, "orderby": orderby,
+                })
+            body = ask(hp_range, retreat_range)
+            if pages == 0 and len(ranges) > 1:
+                for hp_range, retreat_range in ranges:
+                    body = ask(hp_range, retreat_range)
+                    try:
+                        if int(json.loads(body or "{}").get("count") or 0) > 0:
+                            log(f"ko: Pokémon tab accepts hp={hp_range!r} retreat={retreat_range!r}")
+                            break
+                    except json.JSONDecodeError:
+                        pass
+                    log(f"ko: hp={hp_range!r} retreat={retreat_range!r} gave {(body or '')[:160]!r}")
             try:
                 data = json.loads(body or "{}")
             except json.JSONDecodeError:
