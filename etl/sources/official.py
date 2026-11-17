@@ -288,6 +288,10 @@ def main():
         with open(args.out, encoding="utf-8") as f:
             known = json.load(f)
     listed = lister(client, log, args.max_pages)
+    odd = [i for i in listed if not re.fullmatch(r"[\w.-]+", str(i))]  # e.g. "BS2022003348 m"
+    for i in odd:
+        log(f"{args.source}: odd id {i!r} left out")
+        del listed[i]
 
     # newest cards first: they are the ones TCGdex is most likely to lack
     todo = sorted((i for i in listed if i not in known or not known[i].get("number")), key=lambda i: (len(i), i), reverse=True)
@@ -311,7 +315,12 @@ def main():
         if time.monotonic() > deadline:
             log(f"{args.source}: time budget reached, {len(todo) - done} left for the next run")
             break
-        rec = detailer(client, card_id)
+        try:
+            rec = detailer(client, card_id)
+        except Exception as e:  # noqa: BLE001 - one odd card must not lose a run's work
+            log(f"{args.source}: card {card_id!r} skipped: {type(e).__name__}: {str(e)[:120]}")
+            done += 1
+            continue
         if rec is not None:
             merged = {**listed[card_id], **{k: v for k, v in rec.items() if v not in (None, [], "")}}
             merged.setdefault("set", merged.get("expansion"))
