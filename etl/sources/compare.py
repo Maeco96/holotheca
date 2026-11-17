@@ -17,6 +17,14 @@ import unicodedata
 from collections import defaultdict
 
 
+# Common start of each site's image addresses, so the map the app downloads stays small.
+PREFIX = {
+    "ja": "https://www.pokemon-card.com/assets/images/card_images/large/",
+    "ko": "https://pokemoncard.co.kr/public-assets/home/data/cards.image_www/data/wmimages/",
+    "zh-tw": "https://asia.pokemon-card.com/tw/card-img/",
+}
+
+
 def norm_name(s):
     s = unicodedata.normalize("NFKC", s or "").lower()
     return re.sub(r"[\s・･·'’`\-]", "", s)
@@ -30,8 +38,12 @@ def num_key(n):
 def load_catalogue(path, lang):
     db = sqlite3.connect(path)
     sets = {}
-    for set_id, source_id, count in db.execute("SELECT id, source_id, official_count FROM sets"):
-        sets[source_id.lower()] = (set_id, count)
+    # The official Asian sites use the Asian set codes; TCGdex keeps those sets under "asia:"
+    # series, and an international set may share a code (then its id gets a suffix).
+    for set_id, source_id, count, series in db.execute("SELECT id, source_id, official_count, series_id FROM sets"):
+        key = source_id.lower()
+        if key not in sets or series.startswith("asia:"):
+            sets[key] = (set_id, count)
     cards = defaultdict(dict)
     rows = db.execute(
         "SELECT c.set_id, c.number, n.name FROM cards c LEFT JOIN card_names n ON n.card_id = c.id AND n.lang = ?",
@@ -115,8 +127,11 @@ def main():
 
     with open(args.report, "w", encoding="utf-8") as f:
         f.write("\n".join(out))
+    cards = {}
+    for key, by_lang in sorted(images.items()):
+        cards[key] = {lang: url[len(PREFIX[lang]):] if url.startswith(PREFIX.get(lang, "\0")) else url for lang, url in by_lang.items()}
     with open(args.images, "w", encoding="utf-8") as f:
-        json.dump(dict(sorted(images.items())), f, ensure_ascii=False, separators=(",", ":"))
+        json.dump({"prefix": PREFIX, "cards": cards}, f, ensure_ascii=False, separators=(",", ":"))
     print("\n".join(out[:40]))
 
 

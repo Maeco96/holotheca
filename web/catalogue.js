@@ -8,6 +8,10 @@ const Catalogue = (() => {
   let promise = null;
   let index = null; // prepared index, see HolothecaRecognize.prepareIndex
   let byKey = null;
+  // Images on the official card sites (Japan, Korea, Taiwan) for cards TCGdex has no picture
+  // of, built by etl/sources/compare.py. Loaded from the official site, never copied here.
+  let official = null; // { prefix: {lang: url}, cards: {key: {lang: path}} }
+  const OFFICIAL_SITES = { ja: "pokemon-card.com", ko: "pokemoncard.co.kr", "zh-tw": "asia.pokemon-card.com" };
 
   function absolute(path) {
     return new URL(path, document.baseURI).href;
@@ -22,6 +26,7 @@ const Catalogue = (() => {
           return response.json();
         })
         .then((raw) => {
+          loadOfficial();
           index = HolothecaRecognize.prepareIndex(raw);
           byKey = new Map();
           raw.cards.forEach((card, i) => byKey.set(`${raw.sets[card[0]][0]}-${card[1]}`, i));
@@ -34,6 +39,24 @@ const Catalogue = (() => {
         });
     }
     return promise;
+  }
+
+  /** The official image map is optional: without it the app shows TCGdex images only. */
+  function loadOfficial() {
+    return fetch(absolute("data/official-images.json"))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => { official = data && data.cards ? data : null; })
+      .catch(() => { official = null; });
+  }
+
+  function officialImages(key) {
+    const entry = official && official.cards[key];
+    if (!entry) return [];
+    return Object.entries(entry).map(([lang, path]) => ({
+      lang,
+      url: /^https?:/.test(path) ? path : (official.prefix[lang] || "") + path,
+      official: OFFICIAL_SITES[lang] || true,
+    }));
   }
 
   function info() {
@@ -87,7 +110,7 @@ const Catalogue = (() => {
     if (!pattern || !c.set.seriesSource) return [];
     const langs = IMAGE_LANG_ORDER.filter((lang) => c.set.langs.includes(lang));
     if (preferred && langs.includes(preferred)) langs.unshift(...langs.splice(langs.indexOf(preferred), 1));
-    return langs.map((lang) => ({
+    const tcgdex = langs.map((lang) => ({
       lang,
       url: pattern
         .replace("{lang}", lang)
@@ -95,6 +118,19 @@ const Catalogue = (() => {
         .replace("{set}", encodeURIComponent(c.set.source))
         .replace("{number}", encodeURIComponent(c.number)) + `/${quality}.webp`,
     }));
+    // An official image goes right after the TCGdex image of the same language, so the
+    // wanted language is tried on both sources before falling back to another language.
+    const extra = officialImages(c.key);
+    if (!extra.length) return tcgdex;
+    const out = [];
+    const placed = new Set();
+    for (const image of tcgdex) {
+      out.push(image);
+      for (const o of extra) if (o.lang === image.lang && !placed.has(o)) { out.push(o); placed.add(o); }
+    }
+    const rest = extra.filter((o) => !placed.has(o));
+    const wanted = rest.filter((o) => o.lang === preferred);
+    return [...wanted, ...out, ...rest.filter((o) => o.lang !== preferred)];
   }
 
   /** One printing from its index token "type:subtype:stamps:foil:size". */

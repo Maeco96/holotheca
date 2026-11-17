@@ -136,13 +136,25 @@ def ko_list(client, log, max_pages=None):
     """The card page loads more cards with a POST ("get_more_cards"), one tab per card kind:
     1 Pokémon, 2 Trainers, 3 Energy. `limit` is the offset the server hands back each time."""
     seen = {}
+    front = client.get(f"{KO}/cards") or ""
+    for i in re.findall(r'/cards/detail/([A-Za-z0-9]+)"', front):
+        seen.setdefault(i, {})
+    # the sort the page sends by default, and the offset after the cards already on the page
+    opt = re.search(r'<option[^>]*data-order="([^"]*)"[^>]*data-orderby="([^"]*)"', front) or \
+        re.search(r'<option[^>]*data-orderby="([^"]*)"[^>]*data-order="([^"]*)"', front)
+    order, orderby = (opt.group(1), opt.group(2)) if opt else ("", "")
+    if opt and "data-orderby" in opt.group(0)[: opt.group(0).find("data-order=")]:
+        order, orderby = orderby, order
+    lim = re.search(r'name="limit"[^>]*value="(\d+)"', front) or re.search(r'value="(\d+)"[^>]*name="limit"', front)
+    start = int(lim.group(1)) if lim else len(seen)
+    log(f"ko: {len(seen)} cards on the page, sort {order!r}/{orderby!r}, next offset {start}")
     for kind in (1, 2, 3):
-        offset, pages = 0, 0
+        offset, pages = (start if kind == 1 else 0), 0
         while True:
             body = client.get(f"{KO}/v2/ajax2_dev2", referer=f"{KO}/cards", form={
                 "action": "get_more_cards", "limit": offset, "GoodsName": "", "CardTypeNum": kind,
                 "CardType": "", "CardMonType": "", "Weakness": "", "Resistance": "", "TechErg": "",
-                "ability_label1": "", "hp": "", "retreat": "", "order": "", "orderby": "",
+                "ability_label1": "", "hp": "", "retreat": "", "order": order, "orderby": orderby,
             })
             try:
                 data = json.loads(body or "{}")
@@ -150,6 +162,8 @@ def ko_list(client, log, max_pages=None):
                 raise RuntimeError(f"ko: the load-more answer is not JSON: {(body or '')[:200]!r}")
             rows = data.get("result") or []
             if not rows or int(data.get("count") or 0) == 0:
+                if pages == 0:
+                    log(f"ko: kind {kind} answered {(body or '')[:300]!r}")
                 break
             for r in rows:
                 seen.setdefault(str(r["CardNum"]), {"kind": kind})

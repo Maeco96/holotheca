@@ -39,6 +39,16 @@ jobs:
           git clone --depth 1 https://github.com/tcgdex/cards-database.git "$RUNNER_TEMP/tcgdex"
           python3 etl/build_catalogue.py "$RUNNER_TEMP/tcgdex" --out "$RUNNER_TEMP/catalogue.sqlite"
           python3 etl/export_scan_index.py "$RUNNER_TEMP/catalogue.sqlite" --out web/data/scan-index.json
+      # Addresses of the images on the official card sites (Japan, Korea, Taiwan), from the
+      # facts collected by official-sources.yml. Only addresses: the phone loads the images there.
+      - name: Map official images
+        run: |
+          shopt -s nullglob
+          files=(etl/sources/data/*.json)
+          if [ ${#files[@]} -gt 0 ]; then
+            python3 etl/sources/compare.py "$RUNNER_TEMP/catalogue.sqlite" "${files[@]}" \
+              --report "$RUNNER_TEMP/official-vs-tcgdex.md" --images web/data/official-images.json
+          fi
       - name: Stamp cache name
         run: sed -i 's/holotheca-dev/holotheca-${{ github.run_number }}/' web/sw.js
       - uses: actions/configure-pages@v5
