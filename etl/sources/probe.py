@@ -13,10 +13,8 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Eighth pass: how Pokémon Central lists the cards of a set
-    "https://wiki.pokemoncentral.it/Fossil_(GCC)#context=Aerodactyl",
-    "https://wiki.pokemoncentral.it/Aerodactyl_(Fossil_1)#grep=og:image|Debolezza|Illustrat|Rarit|/\\d+|prima edizione|Edizione",
-    "https://wiki.pokemoncentral.it/Rocket_(GCC)#context=Dark",
+    # Ninth pass: what the Korean card page sends for the Pokémon tab (hp / retreat fields)
+    "https://pokemoncard.co.kr/cards#grep=get_more_cards|name=\"hp\"|name=\"retreat\"|id=\"hp|retreat|\\.js|CardTypeNum|slider|range",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
