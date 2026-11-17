@@ -199,7 +199,7 @@ def tw_detail(client, card_id):
     if m:
         # the heading holds the stage ("基礎", "1階進化", ...) before the name
         full = re.sub(r"\s+", " ", text(m.group(1)))
-        stage = re.match(r"^(基礎|\S*進化|復原|TAG TEAM|V-UNION)\s+", full)
+        stage = re.match(r"^(基礎|\S*進化|復原|TAG TEAM|V-UNION|物品|支援者|競技場|寶可夢道具|基本能量|特殊能量)\s+", full)
         rec["stage"] = stage.group(1) if stage else None
         rec["name"] = full[stage.end():] if stage else full
     m = re.search(r'<section class="expansionColumn">(.*?)</section>', page, re.S)
