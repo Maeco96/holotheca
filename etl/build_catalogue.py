@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import sqlite3
 import sys
 from collections import defaultdict
@@ -24,6 +25,7 @@ from tsliteral import Ident, parse_declaration
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "db" / "catalogue.sql"
+WIKI_IT = Path(__file__).resolve().parent / "sources" / "data" / "wiki-it.json"
 OVERRIDES = Path(__file__).resolve().parent / "overrides" / "external_ids.csv"
 
 FAMILIES = {
@@ -299,6 +301,28 @@ class Builder:
 
     # ----- manual corrections -----
 
+    def apply_wiki_names(self, path: Path) -> int:
+        """Add Italian card names from Pokémon Central (etl/sources/wiki_it.py) where TCGdex has none.
+
+        Facts only (a card's name); TCGdex stays the reference wherever it already has a name.
+        """
+        if not path.is_file() or not self.ensure_language("it"):
+            return 0
+        facts = json.loads(path.read_text(encoding="utf-8"))
+        added = 0
+        for source_id, entry in facts.items():
+            name = (entry or {}).get("name")
+            row = self.db.execute("SELECT id FROM cards WHERE source_id = ?", (source_id,)).fetchone()
+            if not name or not row:
+                continue
+            if self.db.execute("SELECT 1 FROM card_names WHERE card_id = ? AND lang = 'it'", (row[0],)).fetchone():
+                continue
+            self.db.execute("INSERT INTO card_names (card_id, lang, name) VALUES (?, 'it', ?)", (row[0], name))
+            self.db.execute("INSERT INTO card_search (name, card_id, lang) VALUES (?, ?, 'it')", (name, row[0]))
+            added += 1
+        self.stats["names"] += added
+        return added
+
     def apply_overrides(self, path: Path) -> int:
         """Apply etl/overrides/external_ids.csv. Columns: card_source_id, provider, external_id, variant_type.
 
@@ -369,6 +393,8 @@ def build(tcgdex: Path, out: Path) -> dict:
         for family in FAMILIES:
             builder.build_family(family, tcgdex)
         overrides = builder.apply_overrides(OVERRIDES)
+        wiki_names = builder.apply_wiki_names(WIKI_IT)
+        print(f"Italian names added from Pokémon Central: {wiki_names}", file=sys.stderr)
 
         # Drop languages with no data so the app only lists real ones.
         used = tuple(builder.languages_seen)

@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.10.0";
+const VERSION = "0.10.1";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -127,7 +127,7 @@ function imageNote(card, wantedLang) {
     }
     const language = (LANG_LABELS[lang] || lang).toLowerCase();
     const other = wantedLang && wantedLang !== lang ? ` (manca quella in ${(LANG_LABELS[wantedLang] || wantedLang).toLowerCase()})` : "";
-    const source = image && typeof image.official === "string" ? `, dal sito ufficiale ${image.official}` : "";
+    const source = image && typeof image.official === "string" ? `, ${image.official.includes("wiki") ? "dalla wiki" : "dal sito ufficiale"} ${image.official}` : "";
     note.textContent = `Immagine di riferimento in ${language}${other}${source}.` +
       (several ? " Può mostrare un'altra versione, per esempio con il timbro 1ª edizione: la versione la scegli tu." : "");
   };

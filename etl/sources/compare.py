@@ -19,6 +19,7 @@ from collections import defaultdict
 
 # Common start of each site's image addresses, so the map the app downloads stays small.
 PREFIX = {
+    "it": "https://media.pokemoncentral.it/wiki/",
     "ja": "https://www.pokemon-card.com/assets/images/card_images/large/",
     "ko": "https://pokemoncard.co.kr/public-assets/home/data/cards.image_www/data/wmimages/",
     "zh-tw": "https://asia.pokemon-card.com/tw/card-img/",
@@ -66,6 +67,14 @@ def main():
     out = ["# Official sites vs TCGdex", ""]
     for src in args.sources:
         lang = os.path.basename(src).removesuffix(".json")
+        if lang == "wiki-it":
+            # Pokémon Central: only scans that Tesseract read as Italian are mapped as images
+            if os.path.exists(src):
+                with open(src, encoding="utf-8") as f:
+                    for key, rec in json.load(f).items():
+                        if rec.get("image") and rec.get("read") == "it":
+                            images[key]["it"] = rec["image"]
+            continue
         if not os.path.exists(src):
             out += [f"## {lang}: no data yet", ""]
             continue
