@@ -14,6 +14,10 @@ on:
       - "etl/sources/compare.py"
       - ".github/workflows/official-sources.yml"
   workflow_dispatch:
+    inputs:
+      source:
+        description: "Which site to collect (all, ja, ko or zh-tw); one site runs next to a long run of another"
+        default: all
   schedule:
     - cron: "17 3 * * 1" # weekly, Monday 03:17 UTC: new sets and corrections
 
@@ -22,7 +26,7 @@ permissions:
 
 concurrency:
   # full collections queue one after the other; smoke tests do not wait behind them
-  group: official-sources-${{ github.ref }}-${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[collect]') }}
+  group: official-sources-${{ github.ref }}-${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[collect]') }}-${{ github.event.inputs.source || 'all' }}
   cancel-in-progress: false
 
 env:
@@ -42,6 +46,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: Collect
+        if: ${{ github.event.inputs.source == '' || github.event.inputs.source == 'all' || github.event.inputs.source == matrix.source }}
         run: |
           mkdir -p out
           if [ "$FULL" = "true" ]; then
