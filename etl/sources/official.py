@@ -279,7 +279,8 @@ def main():
         todo = [i for i in todo if re.search(r"/large/([^/]+)/", listed[i].get("image", "")) and re.search(r"/large/([^/]+)/", listed[i]["image"]).group(1) in wanted]
     if args.limit:
         todo = todo[: args.limit]
-    log(f"{args.source}: {len(listed)} listed, {len(known)} known, {len(todo)} to ask")
+    log(f"{args.source}: {len(listed)} listed, {len(known)} known, {len(todo)} to ask, "
+        f"about {len(todo) / args.rate / 60:.0f} minutes at {args.rate}/s (budget {args.budget:.0f})")
 
     def save():
         os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
