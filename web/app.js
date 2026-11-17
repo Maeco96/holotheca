@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.11.0";
+const VERSION = "0.12.0";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -164,7 +164,7 @@ function route() {
   if (view !== "scan" && Camera.running()) Camera.stop();
   if (view === "scrigno") renderCollection();
   if (view === "scan") enterScan();
-  if (view === "search") $("searchInput").focus({ preventScroll: true });
+  if (view === "search") renderSearch(argument.split("/")[0] || "");
   if (view === "more") renderMore();
   if (view === "card") renderCard(argument);
   window.scrollTo(0, 0);
@@ -465,68 +465,175 @@ $("startCamera").addEventListener("click", startCamera);
 $("shutter").addEventListener("click", captureAndRead);
 
 // ---------- Search ----------
+// The search view is a browser of expansions (tiles with the logo, the date and how many cards
+// you own), an expansion page with every card of it, and the name/number search on top.
 
 let searchTimer = null;
+let searchLang = "";      // language filter ("" = all)
+let setFilter = "all";    // on the expansion page: all | have | missing
 
-// The language and expansion pickers are filled from the catalogue: an expansion alone lists
-// all its cards, a language keeps only the expansions printed in it.
-function fillSearchFilters() {
-  const langSelect = $("searchLang");
-  const setSelect = $("searchSet");
-  const sets = Catalogue.sets();
-  const langs = [...new Set(sets.flatMap((set) => set.langs))]
-    .sort((a, b) => (LANG_LABELS[a] || a).localeCompare(LANG_LABELS[b] || b, "it"));
-  const lang = langSelect.value;
-  const setId = setSelect.value;
-  langSelect.innerHTML = "";
-  langSelect.add(new Option("Tutte le lingue", ""));
-  for (const code of langs) langSelect.add(new Option(LANG_LABELS[code] || code, code));
-  langSelect.value = lang;
-  setSelect.innerHTML = "";
-  setSelect.add(new Option("Tutte le espansioni", ""));
-  for (const set of sets) {
-    if (langSelect.value && !set.langs.includes(langSelect.value)) continue;
-    const year = set.releaseDate ? ` ${set.releaseDate.slice(0, 4)}` : "";
-    setSelect.add(new Option(`${set.name} (${set.code})${year} · ${set.cards}`, set.id));
+function ownedBySet() {
+  const perSet = new Map();
+  const seen = new Set();
+  for (const copy of Store.copies()) {
+    if (seen.has(copy.card_source_id)) continue;
+    seen.add(copy.card_source_id);
+    const card = Catalogue.cardByKey(copy.card_source_id);
+    if (card) perSet.set(card.set.id, (perSet.get(card.set.id) || 0) + 1);
   }
-  setSelect.value = setId;
-  if (setSelect.value !== setId) setSelect.value = "";
+  return perSet;
 }
 
-async function runSearch() {
-  await Catalogue.load();
-  if (Catalogue.prepared() && $("searchSet").options.length === 0) fillSearchFilters();
-  const text = $("searchInput").value.trim();
-  const lang = $("searchLang").value;
-  const setId = $("searchSet").value;
-  const results = Catalogue.search(text, 60, { lang, setId });
-  const list = $("searchResults");
-  list.innerHTML = "";
-  const where = setId ? " nell'espansione" : "";
-  $("searchInfo").textContent = !Catalogue.prepared()
-    ? "Catalogo non disponibile: serve la rete al primo avvio."
-    : !setId && text.length < 2 ? "Cerca in tutte le lingue del catalogo, o scegli un'espansione per vedere tutte le sue carte."
-    : results.length ? (setId && !text ? `${results.length} carte, in ordine di numero`
-      : `${results.length}${results.length === 60 ? "+" : ""} carte${where}, le più recenti per prime`)
-    : "Nessuna carta trovata.";
+/** The logo of an expansion, falling back to its code when no logo can be loaded. */
+function setLogo(set, lang) {
+  const box = el("div", { class: "logo" });
+  const fallback = el("span", { class: "code", text: set.code });
+  box.appendChild(fallback);
+  const urls = Catalogue.setLogos(set, lang || null);
+  if (!urls.length) return box;
+  let attempt = 0;
+  const img = el("img", { alt: set.name, loading: "lazy", decoding: "async", class: "loading" });
+  img.addEventListener("load", () => { img.classList.remove("loading"); fallback.remove(); });
+  img.addEventListener("error", () => { attempt += 1; if (attempt < urls.length) img.src = urls[attempt]; });
+  img.src = urls[0];
+  box.appendChild(img);
+  return box;
+}
+
+function monthYear(iso) {
+  if (!iso) return "";
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("it-IT", { month: "short", year: "numeric" });
+}
+
+function setTile(set, owned) {
+  const have = owned.get(set.id) || 0;
+  return el("button", { class: "settile", onclick: () => { setFilter = "all"; location.hash = `#/cerca/${encodeURIComponent(set.id)}`; } },
+    el("div", { class: "top" }, setLogo(set, searchLang), set.releaseDate ? el("span", { class: "date", text: monthYear(set.releaseDate) }) : null),
+    el("div", { class: "nm", text: set.name }),
+    el("div", { class: "meta" },
+      el("span", { text: `${set.code ? `${set.code} · ` : ""}${set.cards} carte` }),
+      have ? el("b", { text: `${have}/${set.cards}` }) : null),
+    have ? el("div", { class: "bar" }, el("i", { style: `width:${Math.min(100, Math.round((have / set.cards) * 100))}%` })) : null);
+}
+
+function fillLangChips() {
+  const row = $("searchLangs");
+  const order = ["it", "en", "ja", "ko", "zh-tw", "zh-cn", "fr", "de", "es", "pt"];
+  const rank = (code) => (order.includes(code) ? order.indexOf(code) : order.length);
+  const langs = [...new Set(Catalogue.sets().flatMap((set) => set.langs))]
+    .sort((a, b) => rank(a) - rank(b) || (LANG_LABELS[a] || a).localeCompare(LANG_LABELS[b] || b, "it"));
+  row.innerHTML = "";
+  const chip = (label, value) =>
+    el("button", { class: searchLang === value ? "chip on" : "chip", text: label,
+      onclick: () => { searchLang = value; fillLangChips(); renderSearch(); } });
+  row.appendChild(chip("Tutte le lingue", ""));
+  for (const code of langs) row.appendChild(chip(LANG_LABELS[code] || code, code));
+}
+
+function renderSetGrid(body, owned) {
+  const sets = Catalogue.sets().filter((set) => !searchLang || set.langs.includes(searchLang));
+  body.appendChild(el("p", { class: "muted small", text: `${sets.length} espansioni, le più recenti per prime. Tocca un'espansione per vedere tutte le sue carte.` }));
+  let year = null;
+  let grid = null;
+  for (const set of sets) {
+    const y = set.releaseDate ? set.releaseDate.slice(0, 4) : "Senza data";
+    if (y !== year) {
+      year = y;
+      body.appendChild(el("h2", { class: "yearhead", text: y }));
+      grid = el("div", { class: "setgrid" });
+      body.appendChild(grid);
+    }
+    grid.appendChild(setTile(set, owned));
+  }
+}
+
+function renderSetPage(body, setId, owned) {
+  const set = Catalogue.sets().find((candidate) => candidate.id === setId);
+  if (!set) { body.appendChild(el("p", { class: "muted", text: "Espansione non trovata." })); return; }
+  const cards = Catalogue.cardsOfSet(setId);
+  const keys = new Set(Store.copies().map((copy) => copy.card_source_id));
+  const have = cards.filter((card) => keys.has(card.key)).length;
+  const lang = searchLang && set.langs.includes(searchLang) ? searchLang : null;
+
+  body.appendChild(el("div", { class: "sethead" },
+    el("button", { class: "chip", text: "‹ Espansioni", onclick: () => { location.hash = "#/cerca"; } }),
+    setLogo(set, lang),
+    el("h2", { text: set.name }),
+    el("div", { class: "muted small", text: [set.code, formatDate(set.releaseDate), `${cards.length} carte`,
+      set.langs.map((code) => LANG_LABELS[code] || code).join(", ")].filter(Boolean).join(" · ") }),
+    el("div", { class: "progress" },
+      el("div", { class: "bar big" }, el("i", { style: `width:${cards.length ? Math.round((have / cards.length) * 100) : 0}%` })),
+      el("span", { class: "small", text: have ? `Ne hai ${have} su ${cards.length}` : "Non ne hai ancora nessuna" }))));
+
+  const row = el("div", { class: "chiprow" });
+  for (const [value, label] of [["all", `Tutte (${cards.length})`], ["have", `Le ho (${have})`], ["missing", `Mi mancano (${cards.length - have})`]]) {
+    row.appendChild(el("button", { class: setFilter === value ? "chip on" : "chip", text: label,
+      onclick: () => { setFilter = value; renderSearch(); } }));
+  }
+  body.appendChild(row);
+
+  const grid = el("div", { class: "grid cardgrid" });
+  for (const card of cards) {
+    const owns = keys.has(card.key);
+    if ((setFilter === "have" && !owns) || (setFilter === "missing" && owns)) continue;
+    grid.appendChild(
+      el("button", { class: owns ? "tile" : "tile missing", onclick: () => { location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
+        art(card, { lang }),
+        owns ? el("span", { class: "qty", text: "✓" }) : null,
+        el("div", { class: "cap", text: `${card.number} ${card.name}` })));
+  }
+  body.appendChild(grid);
+  if (!grid.children.length) body.appendChild(el("p", { class: "muted", text: "Nessuna carta in questo elenco." }));
+}
+
+function renderTextResults(body, text, owned) {
+  const lower = text.toLowerCase();
+  const sets = Catalogue.sets().filter((set) => (!searchLang || set.langs.includes(searchLang)) &&
+    (set.name.toLowerCase().includes(lower) || set.code.toLowerCase() === lower)).slice(0, 12);
+  if (sets.length) {
+    body.appendChild(el("h2", { text: "Espansioni" }));
+    body.appendChild(el("div", { class: "setstrip" }, sets.map((set) => setTile(set, owned))));
+  }
+  const results = Catalogue.search(text, 60, { lang: searchLang });
+  body.appendChild(el("h2", { text: "Carte" }));
+  body.appendChild(el("p", { class: "muted small", text: results.length
+    ? `${results.length}${results.length === 60 ? "+" : ""} carte, le più recenti per prime`
+    : "Nessuna carta trovata." }));
+  const list = el("div", { class: "list" });
   for (const card of results) {
     list.appendChild(
       el("button", { class: "item", onclick: () => { location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
-        art(card, { lang: lang || null }),
+        art(card, { lang: searchLang || null }),
         el("div", { class: "grow" },
           el("div", { class: "t", text: card.name }),
           el("div", { class: "s", text: cardLine(card) }),
-          card.rarity ? el("div", { class: "s", text: card.rarity }) : null))
-    );
+          card.rarity ? el("div", { class: "s", text: card.rarity }) : null)));
   }
+  body.appendChild(list);
 }
 
-$("searchLang").addEventListener("change", () => { fillSearchFilters(); runSearch(); });
-$("searchSet").addEventListener("change", runSearch);
+async function renderSearch(setId = null) {
+  await Catalogue.load();
+  const body = $("searchBody");
+  body.innerHTML = "";
+  if (!Catalogue.prepared()) {
+    body.appendChild(el("p", { class: "muted", text: "Catalogo non disponibile: serve la rete al primo avvio." }));
+    return;
+  }
+  const argument = setId !== null ? setId : decodeURIComponent((location.hash.split("/")[2] || ""));
+  if ($("searchLangs").children.length === 0) fillLangChips();
+  const owned = ownedBySet();
+  const text = $("searchInput").value.trim();
+  $("searchLangs").hidden = Boolean(argument) && !text;
+  if (text.length >= 2) renderTextResults(body, text, owned);
+  else if (argument) renderSetPage(body, argument, owned);
+  else renderSetGrid(body, owned);
+}
 
 $("searchInput").addEventListener("input", () => {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(runSearch, 180);
+  searchTimer = setTimeout(renderSearch, 180);
 });
 
 // ---------- Card page ----------

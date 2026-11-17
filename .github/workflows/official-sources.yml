@@ -81,7 +81,7 @@ jobs:
       - name: Build the TCGdex catalogue
         run: |
           git clone --depth 1 https://github.com/tcgdex/cards-database.git "$RUNNER_TEMP/tcgdex"
-          python3 etl/build_catalogue.py "$RUNNER_TEMP/tcgdex" --out "$RUNNER_TEMP/catalogue.sqlite"
+          python3 etl/build_catalogue.py "$RUNNER_TEMP/tcgdex" --out "$RUNNER_TEMP/catalogue.sqlite" --no-official
       - name: Compare
         run: |
           python3 etl/sources/compare.py "$RUNNER_TEMP/catalogue.sqlite" collected/ja.json collected/ko.json collected/zh-tw.json \

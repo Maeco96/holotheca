@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import re
 import sqlite3
 import sys
 from collections import defaultdict
@@ -25,6 +26,7 @@ from tsliteral import Ident, parse_declaration
 
 ROOT = Path(__file__).resolve().parent.parent
 SCHEMA = ROOT / "db" / "catalogue.sql"
+OFFICIAL_DIR = Path(__file__).resolve().parent / "sources" / "data"
 WIKI_IT = Path(__file__).resolve().parent / "sources" / "data" / "wiki-it.json"
 OVERRIDES = Path(__file__).resolve().parent / "overrides" / "external_ids.csv"
 
@@ -323,6 +325,84 @@ class Builder:
         self.stats["names"] += added
         return added
 
+    def apply_official(self, directory: Path) -> dict:
+        """Add what the official sites list and TCGdex lacks (etl/sources/official.py data).
+
+        Cards missing from an expansion TCGdex has, whole expansions TCGdex does not have (they
+        get the series 'official' and their own set id 'off-<code>'), and names in the official
+        language where TCGdex has none. TCGdex stays the reference wherever it has data.
+        """
+        added = {"sets": 0, "cards": 0, "names": 0}
+        files = [(lang, directory / f"{lang}.json") for lang in ("ja", "ko", "zh-tw")]
+        files = [(lang, path) for lang, path in files if path.is_file()]
+        if not files:
+            return added
+
+        def key(number) -> str:
+            m = re.match(r"^([A-Za-z]*)0*(\d+)([A-Za-z]?)$", str(number or "").strip())
+            return f"{m.group(1).upper()}{int(m.group(2))}{m.group(3).lower()}" if m else str(number or "").strip().upper()
+
+        by_code: dict[str, str] = {}
+        for set_id, source_id, series in self.db.execute("SELECT id, source_id, series_id FROM sets"):
+            if source_id.lower() not in by_code or series.startswith("asia:"):
+                by_code[source_id.lower()] = set_id
+        cards: dict[str, dict[str, int]] = {}
+        for card_id, set_id, number in self.db.execute("SELECT id, set_id, number FROM cards"):
+            cards.setdefault(set_id, {})[key(number)] = card_id
+        series_ready = False
+
+        for lang, path in files:
+            if not self.ensure_language(lang):
+                continue
+            records = json.loads(path.read_text(encoding="utf-8"))
+            by_set: dict[str, list[dict]] = defaultdict(list)
+            for rec in records.values():
+                code = rec.get("set") or rec.get("expansion")
+                if code and rec.get("number") and rec.get("name"):
+                    by_set[str(code)].append(rec)
+            for code, recs in by_set.items():
+                set_id = by_code.get(code.lower())
+                if set_id is None:
+                    if not series_ready:
+                        self.db.execute("INSERT OR IGNORE INTO series (id, family_id, source_id) VALUES ('official', 'asia', 'official')")
+                        series_ready = True
+                    set_id = f"off-{code}"
+                    total = next((r.get("total") for r in recs if str(r.get("total") or "").isdigit()), None)
+                    self.db.execute(
+                        "INSERT INTO sets (id, source_id, series_id, code, official_count, release_date, is_digital) "
+                        "VALUES (?, ?, 'official', ?, ?, NULL, 0)", (set_id, code, code, int(total) if total else None))
+                    by_code[code.lower()] = set_id
+                    self.stats["sets"] += 1
+                    added["sets"] += 1
+                if not self.db.execute("SELECT 1 FROM set_names WHERE set_id = ? AND lang = ?", (set_id, lang)).fetchone():
+                    products = next((r["products"][0] for r in recs if r.get("products")), None)
+                    existing = self.db.execute("SELECT name FROM set_names WHERE set_id = ? ORDER BY lang = 'en' DESC LIMIT 1", (set_id,)).fetchone()
+                    self.db.execute("INSERT INTO set_names (set_id, lang, name, code) VALUES (?, ?, ?, ?)",
+                                    (set_id, lang, existing[0] if existing else (products or code), code))
+                known = cards.setdefault(set_id, {})
+                for rec in recs:
+                    number = str(rec["number"])
+                    card_id = known.get(key(number))
+                    if card_id is None:
+                        kind = rec.get("kind")
+                        category = {1: "Pokemon", 2: "Trainer", 3: "Energy"}.get(kind) if isinstance(kind, int) else None
+                        if category is None and (rec.get("hp") or rec.get("stage")):
+                            category = "Pokemon"
+                        cursor = self.db.execute(
+                            "INSERT INTO cards (source_id, set_id, number, number_sort, category, illustrator, hp) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (f"{set_id}-{number}", set_id, number, number_sort(number), category, rec.get("illustrator"),
+                             rec.get("hp") if isinstance(rec.get("hp"), int) else None))
+                        card_id = known[key(number)] = cursor.lastrowid
+                        self.stats["cards"] += 1
+                        added["cards"] += 1
+                    if not self.db.execute("SELECT 1 FROM card_names WHERE card_id = ? AND lang = ?", (card_id, lang)).fetchone():
+                        self.db.execute("INSERT INTO card_names (card_id, lang, name) VALUES (?, ?, ?)", (card_id, lang, rec["name"]))
+                        self.db.execute("INSERT INTO card_search (name, card_id, lang) VALUES (?, ?, ?)", (rec["name"], card_id, lang))
+                        self.stats["names"] += 1
+                        added["names"] += 1
+        return added
+
     def apply_overrides(self, path: Path) -> int:
         """Apply etl/overrides/external_ids.csv. Columns: card_source_id, provider, external_id, variant_type.
 
@@ -373,7 +453,7 @@ class Builder:
         return applied
 
 
-def build(tcgdex: Path, out: Path) -> dict:
+def build(tcgdex: Path, out: Path, official: bool = True) -> dict:
     if not (tcgdex / "data").is_dir():
         raise SystemExit(f"error: {tcgdex} does not look like a cards-database clone")
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -394,6 +474,9 @@ def build(tcgdex: Path, out: Path) -> dict:
             builder.build_family(family, tcgdex)
         overrides = builder.apply_overrides(OVERRIDES)
         wiki_names = builder.apply_wiki_names(WIKI_IT)
+        if official:
+            added = builder.apply_official(OFFICIAL_DIR)
+            print(f"Official sites added: {added}", file=sys.stderr)
         print(f"Italian names added from Pokémon Central: {wiki_names}", file=sys.stderr)
 
         # Drop languages with no data so the app only lists real ones.
@@ -429,8 +512,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("repo", type=Path, help="path to a clone of tcgdex/cards-database")
     parser.add_argument("--out", type=Path, default=ROOT / "build" / "catalogue.sqlite")
+    parser.add_argument("--no-official", action="store_true", help="TCGdex and the Italian wiki names only (for the comparison report)")
     args = parser.parse_args()
-    result = build(args.repo, args.out)
+    result = build(args.repo, args.out, official=not args.no_official)
     for warning in result["warnings"]:
         print(f"warning: {warning}", file=sys.stderr)
     print(
