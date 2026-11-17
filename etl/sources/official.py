@@ -196,7 +196,10 @@ def tw_detail(client, card_id):
     m = re.search(r'<img src="(https://asia\.pokemon-card\.com/tw/card-img/tw\d+\.png)"', page)
     rec["image"] = m.group(1) if m else None
     m = re.search(r'<h1 class="pageHeader cardDetail">(.*?)</h1>', page, re.S)
-    rec["name"] = re.sub(r"\s+", " ", text(m.group(1))) if m else None
+    if m:
+        # the heading holds the stage ("基礎", "1階進化", ...) before the name
+        rec["stage"], _, name = re.sub(r"\s+", " ", text(m.group(1))).rpartition(" ")
+        rec["name"] = name or None
     m = re.search(r'<section class="expansionColumn">(.*?)</section>', page, re.S)
     if m:
         block = m.group(1)
@@ -254,6 +257,7 @@ def main():
         rec = detailer(client, card_id)
         if rec is not None:
             merged = {**listed[card_id], **{k: v for k, v in rec.items() if v not in (None, [], "")}}
+            merged.setdefault("set", merged.get("expansion"))
             known[card_id] = merged
         done += 1
         if done % 500 == 0:

@@ -13,12 +13,9 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Third pass: what a modern detail page holds (set, number, rarity), and the list paging
-    "https://www.pokemon-card.com/card-search/details.php/card/50813/regu/all#raw",
-    "https://www.pokemon-card.com/card-search/resultAPI.php?keyword=&regulation_sidebar_form=all&pg=2#raw",
-    "https://pokemoncard.co.kr/cards/detail/BS2026006001#raw",
-    "https://asia.pokemon-card.com/tw/card-search/detail/17978/#raw",
-    "https://www.pokemonkorea.co.kr/terms",
+    # Fourth pass: how the Korean list pages and searches by set are addressed
+    "https://pokemoncard.co.kr/cards#grep=page|paging|more|ajax|fetch\\(|\\.get\\(|\\.post\\(|url:|load",
+    "https://pokemoncard.co.kr/cards?s=M3#grep=detail/|page",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
@@ -64,6 +61,9 @@ def fetch(url):
 
 
 def show(url):
+    grep = None
+    if "#grep=" in url:
+        url, grep = url.split("#grep=")
     raw = url.endswith("#raw")
     url = url.removesuffix("#raw")
     status, ctype, final, body = fetch(url)
@@ -79,6 +79,11 @@ def show(url):
     if "html" not in ctype:
         return
     html = body.decode("utf-8", "replace")
+    if grep:
+        for line in html.splitlines():
+            if re.search(grep, line, re.I):
+                print("  |", line.strip()[:400])
+        return
     if raw:
         main = re.sub(r"<script.*?</script>|<style.*?</style>|<head.*?</head>", "", html, flags=re.S | re.I)
         main = re.sub(r"\n\s*\n+", "\n", main)
