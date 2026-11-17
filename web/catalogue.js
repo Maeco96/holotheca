@@ -11,7 +11,7 @@ const Catalogue = (() => {
   // Images on the official card sites (Japan, Korea, Taiwan) for cards TCGdex has no picture
   // of, built by etl/sources/compare.py. Loaded from the official site, never copied here.
   let official = null; // { prefix: {lang: url}, cards: {key: {lang: path}} }
-  const OFFICIAL_SITES = { ja: "pokemon-card.com", ko: "pokemoncard.co.kr", "zh-tw": "asia.pokemon-card.com" };
+  const OFFICIAL_SITES = { ja: "pokemon-card.com", ko: "pokemoncard.co.kr", "zh-tw": "asia.pokemon-card.com", it: "Pokémon Central (wiki, CC BY-NC-SA)" };
 
   function absolute(path) {
     return new URL(path, document.baseURI).href;
