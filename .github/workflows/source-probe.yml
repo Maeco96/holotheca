@@ -1,0 +1,24 @@
+name: Source probe
+
+# Asks the official card sites what they serve (robots.txt, terms, card search, image paths).
+# These hosts are not reachable from every build environment, so this runs here.
+on:
+  push:
+    paths:
+      - "etl/sources/**"
+      - ".github/workflows/source-probe.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python3 etl/sources/probe.py
