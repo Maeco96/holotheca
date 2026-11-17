@@ -107,8 +107,9 @@ const Catalogue = (() => {
    */
   function images(c, quality = "low", preferred = null) {
     const pattern = index.raw.image_url_pattern;
-    if (!pattern || !c.set.seriesSource) return [];
-    const langs = IMAGE_LANG_ORDER.filter((lang) => c.set.langs.includes(lang));
+    const fromTcgdex = Boolean(pattern && c.set.seriesSource && c.set.seriesSource !== "official");
+    if (!fromTcgdex && !officialImages(c.key).length) return [];
+    const langs = fromTcgdex ? IMAGE_LANG_ORDER.filter((lang) => c.set.langs.includes(lang)) : [];
     if (preferred && langs.includes(preferred)) langs.unshift(...langs.splice(langs.indexOf(preferred), 1));
     const tcgdex = langs.map((lang) => ({
       lang,
@@ -196,7 +197,7 @@ const Catalogue = (() => {
   /** Logo addresses to try for an expansion (from `sets()`), the wanted language first. */
   function setLogos(set, preferred = null) {
     const pattern = index && index.raw.image_url_pattern;
-    if (!pattern || !set.series) return [];
+    if (!pattern || !set.series || set.series === "official") return [];
     const langs = IMAGE_LANG_ORDER.filter((lang) => set.langs.includes(lang));
     if (preferred && langs.includes(preferred)) langs.unshift(...langs.splice(langs.indexOf(preferred), 1));
     return langs.map((lang) => pattern

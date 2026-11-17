@@ -85,7 +85,7 @@ class BuildTests(unittest.TestCase):
         write(self.src, "data-asia/Base/base1/001.ts", """const card: Card = {
             name: { ja: "フシギダネ" }, category: "Pokemon", set: Set }""")
         self.out = root / "catalogue.sqlite"
-        self.result = build_catalogue.build(self.src, self.out)
+        self.result = build_catalogue.build(self.src, self.out, official=False)
         self.db = sqlite3.connect(self.out)
         self.addCleanup(self.db.close)
 
