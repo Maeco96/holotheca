@@ -235,3 +235,7 @@ pre.debug { font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap
 .cardgrid .tile.missing .cap { color: var(--muted); }
 .cardgrid .tile .qty { background: var(--good); }
 .cardgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
+
+/* an expansion without a logo shows its first card instead */
+.logo.cover img { max-height: 100%; width: auto; border-radius: 4px; }
+.sethead .logo.cover { height: 150px; }

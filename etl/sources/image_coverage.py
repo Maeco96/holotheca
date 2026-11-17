@@ -69,19 +69,20 @@ def main():
         key = f"{sets[row[0]][0]}-{row[1]}"
         if ok:
             s["tcgdex"] += 1
+        elif key in off:
+            s["only_official"] += 1
         else:
-            # official map keys use the card's printed code; a set-level lookup is approximate here
             s["none"] += 1
     for s, lg in zip(stats, logos):
         s["logo"] = lg
     stats = [s for s in stats if s["total"]]
-    tot = {k: sum(s[k] for s in stats) for k in ("tcgdex", "none", "total")}
-    lines = [f"# Image coverage", "", f"Cards: {tot['total']}; with a TCGdex image: {tot['tcgdex']}; without: {tot['none']}.",
+    tot = {k: sum(s[k] for s in stats) for k in ("tcgdex", "only_official", "none", "total")}
+    lines = [f"# Image coverage", "", f"Cards: {tot['total']}; with a TCGdex image: {tot['tcgdex']}; only an official image: {tot['only_official']}; no image at all: {tot['none']}.",
              f"Expansion logos missing: {sum(1 for s in stats if s['logo'] is False)} of {sum(1 for s in stats if s['logo'] is not None)}.", "",
-             "| set | name | cards | TCGdex image | none | logo |", "|---|---|---|---|---|---|"]
+             "| set | name | cards | TCGdex image | official only | none | logo |", "|---|---|---|---|---|---|---|"]
     for s in sorted(stats, key=lambda s: -s["none"]):
         if s["none"] or s["logo"] is False:
-            lines.append(f"| {s['id']} | {s['name']} | {s['total']} | {s['tcgdex']} | {s['none']} | {s['logo']} |")
+            lines.append(f"| {s['id']} | {s['name']} | {s['total']} | {s['tcgdex']} | {s['only_official']} | {s['none']} | {s['logo']} |")
     open(args.out, "w", encoding="utf-8").write("\n".join(lines) + "\n")
     if args.json:
         json.dump(stats, open(args.json, "w", encoding="utf-8"), ensure_ascii=False)
