@@ -13,9 +13,8 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Fourth pass: how the Korean list pages and searches by set are addressed
-    "https://pokemoncard.co.kr/cards#grep=page|paging|more|ajax|fetch\\(|\\.get\\(|\\.post\\(|url:|load",
-    "https://pokemoncard.co.kr/cards?s=M3#grep=detail/|page",
+    # Fifth pass: the Korean "load more" request
+    "https://pokemoncard.co.kr/cards#context=get_more_cards",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
@@ -62,6 +61,9 @@ def fetch(url):
 
 def show(url):
     grep = None
+    context = None
+    if "#context=" in url:
+        url, context = url.split("#context=")
     if "#grep=" in url:
         url, grep = url.split("#grep=")
     raw = url.endswith("#raw")
@@ -79,6 +81,11 @@ def show(url):
     if "html" not in ctype:
         return
     html = body.decode("utf-8", "replace")
+    if context:
+        for m in re.finditer(re.escape(context), html):
+            print(html[max(0, m.start() - 2500): m.start() + 2500])
+            print("  ----")
+        return
     if grep:
         for line in html.splitlines():
             if re.search(grep, line, re.I):
