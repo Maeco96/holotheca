@@ -21,7 +21,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: official-sources-${{ github.ref }}
+  # full collections queue one after the other; smoke tests do not wait behind them
+  group: official-sources-${{ github.ref }}-${{ github.event_name != 'push' || contains(github.event.head_commit.message, '[collect]') }}
   cancel-in-progress: false
 
 env:
