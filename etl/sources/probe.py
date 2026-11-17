@@ -13,6 +13,21 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
+    # Second pass: coverage of the gaps and hotlinking
+    "https://www.pokemon-card.com/card-search/resultAPI.php?keyword=&se_ta=&regulation_sidebar_form=all&pg=&illust=&sm_and_keyword=true&expansion=M3",
+    "https://www.pokemon-card.com/card-search/index.php?mode=statuslist&pg=M3",
+    "https://www.pokemon-card.com/card-search/details.php/card/1056/regu/all",
+    "https://www.pokemon-card.com/assets/images/card_images/large/DP1/001056_P_SONANSU.jpg#referer=https://maeco96.github.io/",
+    "https://www.pokemon-card.com/ex/m3/",
+    "https://www.pokemon-card.com/products/",
+    "https://pokemoncard.co.kr/cards/detail/BS2026006001",
+    "https://pokemoncard.co.kr/public-assets/home/data/cards.image_www/data/wmimages/MEGA/M6a/M6a_001.webp#referer=https://maeco96.github.io/",
+    "https://pokemoncard.co.kr/terms",
+    "https://asia.pokemon-card.com/tw/card-search/list/?expansionCodes=M3",
+    "https://asia.pokemon-card.com/tw/policy/",
+    "https://www.pokemon.com/it/gcc/archivio-carte?cardName=Jigglypuff",
+]
+FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
     "https://www.pokemon-card.com/robots.txt",
     "https://www.pokemon-card.com/card-search/",
@@ -41,7 +56,11 @@ TEXT_KINDS = ("robots.txt",)
 
 
 def fetch(url):
-    req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept-Language": "it,en;q=0.8,ja;q=0.6"})
+    headers = {"User-Agent": UA, "Accept-Language": "it,en;q=0.8,ja;q=0.6"}
+    if "#referer=" in url:  # asks as an <img> on another site would: is hotlinking refused?
+        url, ref = url.split("#referer=")
+        headers["Referer"] = ref
+    req = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             return r.status, r.headers.get("Content-Type", ""), r.geturl(), r.read(3_000_000)
@@ -65,10 +84,10 @@ def show(url):
     title = re.search(r"<title[^>]*>(.*?)</title>", html, re.S | re.I)
     print("  title:", (title.group(1).strip() if title else "-")[:200])
     imgs = sorted(set(re.findall(r"""["'(]([^"'()\s]*(?:card|Card)[^"'()\s]*\.(?:png|jpg|jpeg|webp))""", html)))
-    print(f"  card-like images ({len(imgs)}):", *imgs[:15], sep="\n    ")
+    print(f"  card-like images ({len(imgs)}):", *imgs[:25], sep="\n    ")
     links = sorted(set(re.findall(r"""href=["']([^"']*(?:card|carte|cards|search|api|terms|rules|termini)[^"']*)["']""", html, re.I)))
-    print(f"  card-like links ({len(links)}):", *links[:40], sep="\n    ")
-    if any(k in url for k in ("rules", "terms", "termini")):
+    print(f"  card-like links ({len(links)}):", *links[:60], sep="\n    ")
+    if any(k in url for k in ("rules", "terms", "termini", "policy")):
         text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", html, flags=re.S | re.I)
         text = re.sub(r"<[^>]+>", " ", text)
         text = re.sub(r"\s+", " ", text)
