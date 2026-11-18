@@ -131,7 +131,12 @@ const HolothecaVisual = (() => {
     const result = await session.run({ pixels: new ort.Tensor("float32", input, [2, 3, SIZE, SIZE]) });
     const out = result.embedding.data;
     const half = out.length / 2;
-    const parts = { full: out.subarray(0, half), art: out.subarray(half) };
+    const quarter = half / 2;
+    // Each half is [class token | mean of patches]; "fullcls" and "artcls" are the class tokens alone.
+    const parts = {
+      full: out.subarray(0, half), art: out.subarray(half),
+      fullcls: out.subarray(0, quarter), artcls: out.subarray(half, half + quarter),
+    };
     // The index says which parts make its vector (for example "full+art"), then an optional
     // projection to fewer dimensions.
     const pieces = index.method.split("+").map((name) => parts[name]);

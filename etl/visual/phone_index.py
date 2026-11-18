@@ -26,8 +26,17 @@ def load(directory: Path) -> tuple[dict, dict[str, np.ndarray]]:
     return meta, parts
 
 
+def part(parts: dict[str, np.ndarray], name: str) -> np.ndarray:
+    """A named piece of the stored vectors: "full" and "art" (class token and mean of the
+    patches), or only their class token ("fullcls", "artcls")."""
+    if name.endswith("cls"):
+        x = parts[name[:-3]]
+        return x[:, : x.shape[1] // 2]
+    return parts[name]
+
+
 def vectors(parts: dict[str, np.ndarray], method: str) -> np.ndarray:
-    return np.concatenate([parts[name] for name in method.split("+")], axis=1)
+    return np.concatenate([part(parts, name) for name in method.split("+")], axis=1)
 
 
 def fit(x: np.ndarray, dims: int) -> tuple[np.ndarray, np.ndarray]:

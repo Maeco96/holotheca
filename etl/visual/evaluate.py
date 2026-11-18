@@ -71,31 +71,45 @@ def main() -> None:
                 detail.append(f"| {variant} | {method} | {p['id']} | {p['label']} | {rank} | {keys[order[0]]} {s[order[0]]:.3f} | {keys[order[1]]} {s[order[1]]:.3f} | {gap:.3f} |")
             known = [r for r in ranks if r is not None]
             summary.append(f"| {variant} | {method} | {sum(r == 1 for r in known)}/{len(known)} | {sum(r <= 5 for r in known)}/{len(known)} | {sum(r <= 20 for r in known)}/{len(known)} | {', '.join(str(r) for r in ranks)} |")
-    # The packed index the phone gets (phone_index.py): parts, PCA dimensions, int8.
+    # The packed index the phone gets (phone_index.py): which parts, and how many bits per number.
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from phone_index import fit, project, quantize
+    from phone_index import part, project, quantize
+    stored = {"full": full, "art": art}
     packed = []
-    for method in ("full", "art", "full+art"):
-        x = np.concatenate([{"full": full, "art": art}[m] for m in method.split("+")], axis=1)
-        for dims in (0, 384, 256, 128):
-            if dims and dims >= x.shape[1]:
-                continue
-            mean, basis = fit(x, dims) if dims else (None, None)
-            q, scale = quantize(project(x, mean, basis))
-            table = q.astype(np.float32) * scale[:, None]
+    calibration = []
+    for method in ("art", "fullcls+art", "full+art", "fullcls+artcls"):
+        x = project(np.concatenate([part(stored, m) for m in method.split("+")], axis=1), None, None)
+        for bits in (8, 4, 1):
+            if bits == 1:
+                table = np.where(x > 0, 1.0, -1.0).astype(np.float32) / np.sqrt(x.shape[1])
+                size = x.shape[0] * x.shape[1] / 8 / 1e6
+            else:
+                levels = 127 if bits == 8 else 7
+                scale = np.maximum(np.abs(x).max(axis=1), 1e-9) / levels
+                table = np.round(x / scale[:, None]).astype(np.float32) * scale[:, None]
+                size = x.shape[0] * (x.shape[1] * bits / 8 + 4) / 1e6
             for variant in variants:
                 ranks = []
                 for p in photos:
                     if p["label"] not in pos:
                         continue
-                    v = np.concatenate([np.array(p["variants"][variant][m], dtype=np.float32) for m in method.split("+")])[None, :]
-                    s = table @ project(v, mean, basis)[0]
+                    pv = {"full": np.array(p["variants"][variant]["full"], dtype=np.float32)[None, :],
+                          "art": np.array(p["variants"][variant]["art"], dtype=np.float32)[None, :]}
+                    q = project(np.concatenate([part(pv, m) for m in method.split("+")], axis=1), None, None)[0]
+                    if bits == 1:
+                        q = np.where(q > 0, 1.0, -1.0) / np.sqrt(q.shape[0])
+                    s = table @ q
                     truth = same_image(pos[p["label"]])
-                    ranks.append(int((s > max(s[i] for i in truth)).sum()) + 1)
-                size = (q.nbytes + scale.nbytes) / 1e6
-                packed.append(f"| {variant} | {method} | {dims or x.shape[1]} | {size:.1f} MB | {sum(r == 1 for r in ranks)}/{len(ranks)} | {sum(r <= 5 for r in ranks)}/{len(ranks)} | {', '.join(map(str, ranks))} |")
-    lines += ["Packed for the phone (int8):", "", "| cut | parts | dims | size | top-1 | top-5 | ranks |", "|---|---|---|---|---|---|---|", *packed, ""]
+                    right = max(s[i] for i in truth)
+                    ranks.append(int((s > right).sum()) + 1)
+                    if bits == 8 and variant == "find":
+                        other = max(s[i] for i in range(len(s)) if i not in truth)
+                        calibration.append(f"| {method} | {p['id']} | {p['label']} | {right:.3f} | {other:.3f} |")
+                packed.append(f"| {variant} | {method} | {x.shape[1]} | {bits} | {size:.1f} MB | {sum(r == 1 for r in ranks)}/{len(ranks)} | {sum(r <= 5 for r in ranks)}/{len(ranks)} | {', '.join(map(str, ranks))} |")
+    lines += ["Similarity (cosine, int8) of the right card and of the best wrong card, cut \"find\":", "",
+              "| parts | photo | right card | right | best wrong |", "|---|---|---|---|---|", *calibration, ""]
+    lines += ["Packed for the phone:", "", "| cut | parts | dims | bits | size | top-1 | top-5 | ranks |", "|---|---|---|---|---|---|---|---|", *packed, ""]
     lines += ["| cut | compare | top-1 | top-5 | top-20 | ranks |", "|---|---|---|---|---|---|", *summary, "",
               "| cut | compare | photo | right card | rank | first | second | gap |", "|---|---|---|---|---|---|---|---|", *detail, ""]
     args.out.parent.mkdir(parents=True, exist_ok=True)
