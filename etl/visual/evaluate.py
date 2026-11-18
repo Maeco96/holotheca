@@ -71,11 +71,36 @@ def main() -> None:
                 detail.append(f"| {variant} | {method} | {p['id']} | {p['label']} | {rank} | {keys[order[0]]} {s[order[0]]:.3f} | {keys[order[1]]} {s[order[1]]:.3f} | {gap:.3f} |")
             known = [r for r in ranks if r is not None]
             summary.append(f"| {variant} | {method} | {sum(r == 1 for r in known)}/{len(known)} | {sum(r <= 5 for r in known)}/{len(known)} | {sum(r <= 20 for r in known)}/{len(known)} | {', '.join(str(r) for r in ranks)} |")
+    # The packed index the phone gets (phone_index.py): parts, PCA dimensions, int8.
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from phone_index import fit, project, quantize
+    packed = []
+    for method in ("full", "art", "full+art"):
+        x = np.concatenate([{"full": full, "art": art}[m] for m in method.split("+")], axis=1)
+        for dims in (0, 384, 256, 128):
+            if dims and dims >= x.shape[1]:
+                continue
+            mean, basis = fit(x, dims) if dims else (None, None)
+            q, scale = quantize(project(x, mean, basis))
+            table = q.astype(np.float32) * scale[:, None]
+            for variant in variants:
+                ranks = []
+                for p in photos:
+                    if p["label"] not in pos:
+                        continue
+                    v = np.concatenate([np.array(p["variants"][variant][m], dtype=np.float32) for m in method.split("+")])[None, :]
+                    s = table @ project(v, mean, basis)[0]
+                    truth = same_image(pos[p["label"]])
+                    ranks.append(int((s > max(s[i] for i in truth)).sum()) + 1)
+                size = (q.nbytes + scale.nbytes) / 1e6
+                packed.append(f"| {variant} | {method} | {dims or x.shape[1]} | {size:.1f} MB | {sum(r == 1 for r in ranks)}/{len(ranks)} | {sum(r <= 5 for r in ranks)}/{len(ranks)} | {', '.join(map(str, ranks))} |")
+    lines += ["Packed for the phone (int8):", "", "| cut | parts | dims | size | top-1 | top-5 | ranks |", "|---|---|---|---|---|---|---|", *packed, ""]
     lines += ["| cut | compare | top-1 | top-5 | top-20 | ranks |", "|---|---|---|---|---|---|", *summary, "",
               "| cut | compare | photo | right card | rank | first | second | gap |", "|---|---|---|---|---|---|---|---|", *detail, ""]
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text("\n".join(lines), encoding="utf-8")
-    print("\n".join(lines[:5 + len(summary) + 3]))
+    print("\n".join(lines[:5 + len(summary) + len(packed) + 8]))
 
 
 if __name__ == "__main__":
