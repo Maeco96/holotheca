@@ -13,7 +13,7 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Eleventh pass: how Bulbapedia lays out a Japanese set card list
+    # Eleventh pass (retry): how Bulbapedia lays out a Japanese set card list
     "https://bulbapedia.bulbagarden.net/wiki/Gold,_Silver,_to_a_New_World..._(TCG)#grep=Cyndaquil|Totodile|class=\"roundy",
     "https://bulbapedia.bulbagarden.net/wiki/Expansion_Pack_(TCG)#grep=Kangaskhan|Seadra",
     "https://bulbapedia.bulbagarden.net/wiki/Neo_Genesis_(TCG)#grep=Typhlosion",
