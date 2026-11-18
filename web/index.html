@@ -80,6 +80,15 @@
       <button class="shutter" id="shutter" disabled aria-label="Leggi la carta"></button>
       <p class="muted small" id="scanStatus" style="text-align:center;margin:0">La prima lettura scarica circa 40 MB, una volta sola.</p>
       <p class="error" id="scanError" hidden></p>
+      <label class="row muted small continuous"><input type="checkbox" id="continuous"> Scansione continua: le carte riconosciute con sicurezza vanno nella pila e la fotocamera resta pronta per la prossima</label>
+
+      <div class="panel pile" id="pilePanel" hidden>
+        <div class="row"><strong class="grow" id="pileTitle">Pila</strong><button class="btn ghost small" id="pileClear">Svuota</button></div>
+        <div class="list" id="pileList"></div>
+        <div class="fields" id="pileFields"></div>
+        <p class="muted small" id="pileHint"></p>
+        <button class="btn primary block" id="pileAdd" disabled>Aggiungi allo scrigno</button>
+      </div>
 
       <div id="scanResult" hidden>
         <h2 id="verdict"></h2>
@@ -252,6 +261,7 @@
   <script src="store.js" defer></script>
   <script src="camera.js" defer></script>
   <script src="scanlog.js" defer></script>
+  <script src="visual.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

@@ -55,7 +55,6 @@ h2 { margin: 8px 0 -4px; font: 600 18px/1.2 var(--serif); }
 /* ---------- Building blocks ---------- */
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
 .row { display: flex; gap: 10px; align-items: center; }
-.grow { flex: 1; min-width: 0; }
 .btn {
   border: 1px solid var(--line); background: var(--surface-2); border-radius: 12px;
   padding: 12px 14px; font-weight: 600; text-align: center; text-decoration: none; color: var(--text);
@@ -239,3 +238,12 @@ pre.debug { font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap
 /* an expansion without a logo shows its first card instead */
 .logo.cover img { max-height: 100%; width: auto; border-radius: 4px; }
 .sethead .logo.cover { height: 150px; }
+
+/* Scan pile: cards read in a row, added to the collection together */
+.continuous { justify-content: center; margin: 8px 0; gap: 8px; }
+.pile { margin: 10px 0; display: flex; flex-direction: column; gap: 10px; }
+.pile .item { align-items: flex-start; }
+.pile .item select { width: 100%; margin-top: 6px; }
+.pile .item .x { flex: none; background: none; border: 0; color: var(--muted); font-size: 20px; padding: 0 4px; }
+.pile .need { border-color: var(--brass); }
+.grow { flex: 1; min-width: 0; }

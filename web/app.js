@@ -51,7 +51,7 @@ const CONDITIONS = ["MT", "NM", "EX", "GD", "LP", "PL", "PO"];
 const EVIDENCE_LABELS = {
   name: "nome", "name~": "nome (simile)", "number/total": "numero", "number/total~": "numero (ricostruito)",
   "number/total~~": "numero (incerto)", number: "numero", total: "totale espansione", "total~": "totale (incerto)",
-  hp: "PS", "set code": "codice espansione", illustrator: "illustratore",
+  hp: "PS", "set code": "codice espansione", illustrator: "illustratore", image: "immagine",
 };
 
 function el(tag, attrs = {}, ...children) {
@@ -259,6 +259,7 @@ async function startCamera() {
 }
 
 function enterScan() {
+  Catalogue.load().then(() => Pile.render());
   // Once the owner has started the camera, coming back to this tab restarts it.
   if (cameraWanted && !Camera.healthy()) startCamera();
 }
@@ -304,15 +305,71 @@ async function recognizeCanvas(canvas) {
   const width = result.resizedImageWidth || canvas.width;
   const height = result.resizedImageHeight || canvas.height;
   const reading = HolothecaRecognize.parse(result.texts, width, height);
-  const candidates = index ? HolothecaRecognize.match(index, reading, 5) : [];
-  return { reading, candidates, readMs, matchMs: 0, catalogue: Boolean(index) };
+  let candidates = index ? HolothecaRecognize.match(index, reading, 5) : [];
+  let visual = null;
+  if (index && !isConfident(candidates)) {
+    try {
+      visual = await compareImage(canvas, candidates);
+      candidates = visual.candidates;
+    } catch (e) {
+      visual = { error: `${e.name}: ${e.message}` };
+    }
+  }
+  return { reading, candidates, readMs, matchMs: 0, catalogue: Boolean(index), visual };
+}
+
+// Visual fallback. A similarity (cosine of the image vectors) maps to a score between these:
+// below VISUAL_LOW a picture says nothing, at VISUAL_HIGH it is as good as a full text match.
+const VISUAL_LOW = 0.35;
+const VISUAL_HIGH = 0.8;
+const visualScore = (similarity) => Math.max(0, Math.min(1, (similarity - VISUAL_LOW) / (VISUAL_HIGH - VISUAL_LOW)));
+
+/**
+ * When the text is not enough, compares the photo with the picture of every card: text
+ * candidates get the picture as extra evidence, and the most similar pictures join the list.
+ */
+async function compareImage(canvas, candidates) {
+  const { ort } = window.HolothecaOcr;
+  if (!HolothecaVisual.ready()) $("scanStatus").textContent = "Carico il confronto per immagine (circa 30 MB la prima volta)…";
+  await HolothecaVisual.load(ort, absolute);
+  $("scanStatus").textContent = "Confronto l'immagine con il catalogo…";
+  const t0 = performance.now();
+  const { vec } = await HolothecaVisual.embed(ort, canvas);
+  const top = HolothecaVisual.search(vec, 8);
+  const byKey = new Map();
+  for (const c of candidates) {
+    const key = `${c.setId}-${c.number}`;
+    const similarity = HolothecaVisual.similarityOf(vec, key);
+    const v = similarity === null ? 0 : visualScore(similarity);
+    byKey.set(key, { ...c, similarity, score: Math.min(1, c.score * 0.6 + v * 0.4 + (v > 0.5 ? 0.1 : 0)), evidence: v > 0.5 ? [...c.evidence, "image"] : c.evidence });
+  }
+  for (const t of top) {
+    if (byKey.has(t.key)) continue;
+    const card = Catalogue.cardByKey(t.key);
+    if (!card) continue;
+    byKey.set(t.key, {
+      cardIndex: card.index, score: visualScore(t.similarity) * 0.9, similarity: t.similarity, evidence: ["image"],
+      setId: card.set.id, setCode: card.set.code, setName: card.set.name, official: card.set.official,
+      number: card.number, hp: card.hp, name: card.name, names: card.names,
+    });
+  }
+  const merged = [...byKey.values()].sort((a, b) => b.score - a.score).slice(0, 6);
+  return {
+    candidates: merged, ms: Math.round(performance.now() - t0),
+    top: top.map((t) => ({ key: t.key, similarity: Math.round(t.similarity * 1000) / 1000 })),
+  };
+}
+
+/** The first candidate is clearly right: a high score and well ahead of the second. */
+function isConfident(candidates) {
+  const [best, second] = candidates;
+  return Boolean(best && best.score >= 0.75 && (!second || best.score - second.score >= 0.15));
 }
 
 function showScan(canvas, outcome) {
   const { reading, candidates } = outcome;
   const best = candidates[0];
-  const second = candidates[1];
-  const confident = best && best.score >= 0.75 && (!second || best.score - second.score >= 0.15);
+  const confident = isConfident(candidates);
   $("verdict").textContent = !outcome.catalogue
     ? "Catalogo non disponibile"
     : !best ? "Carta non riconosciuta" : confident ? "Trovata" : "Quale di queste?";
@@ -357,7 +414,9 @@ function showScan(canvas, outcome) {
           el("div", { class: "s", text: evidenceOf(top) }),
           readLang ? el("div", { class: "s", text: `Lingua letta: ${LANG_LABELS[readLang] || readLang}` }) : null),
         el("span", { class: percent >= 75 ? "badge good" : "badge warn", text: `${percent}%` }),
-        el("button", { class: "btn primary", text: "È questa: apri la scheda", onclick: () => openCard(card) }))
+        el("button", { class: "btn primary", text: "È questa: apri la scheda", onclick: () => openCard(card) }),
+        el("button", { class: "btn ghost", text: Pile.has(card.key) ? "Già nella pila" : "Metti nella pila",
+          onclick: (event) => { ScanLog.choose(currentLogId, card.key); Pile.add(card.key, readLang); event.target.textContent = "Nella pila"; event.target.disabled = true; } }))
     );
     candidates.forEach((candidate, i) => {
       if (i === focus) return;
@@ -400,7 +459,8 @@ function showScan(canvas, outcome) {
     ctx.strokeRect(line.x * canvas.width, line.y * canvas.height, line.w * canvas.width, line.h * canvas.height);
   }
   $("readingOut").textContent =
-    `${canvas.width}x${canvas.height} px, nitidezza ${canvas.sharpness ?? "n/d"}, lettura ${outcome.readMs} ms\n` +
+    `${canvas.width}x${canvas.height} px, nitidezza ${canvas.sharpness ?? "n/d"}, lettura ${outcome.readMs} ms` +
+    (outcome.visual ? outcome.visual.error ? `, immagine: ${outcome.visual.error}` : `, immagine ${outcome.visual.ms} ms` : "") + "\n" +
     `PS: ${reading.hp ?? "-"}   numero: ${reading.numbers.map((n) => `${n.number}/${n.total}`).join(", ") || "-"}\n\n` +
     reading.lines.map((line) => `${line.text}  (${Math.round(line.confidence * 100)}%)`).join("\n");
   $("readPanel").hidden = false;
@@ -419,10 +479,23 @@ async function captureAndRead() {
     const outcome = await recognizeCanvas(card);
     showScan(card, outcome);
     currentLogId = await ScanLog.record(card, logEntry(card, outcome));
-    $("scanStatus").textContent = currentLogId === null && ScanLog.enabled()
-      ? `Lettura non salvata nel registro: ${ScanLog.lastError() || "errore sconosciuto"}`
-      : "Confronta con la tua foto, poi apri la carta giusta.";
-    $("scanResult").scrollIntoView({ behavior: "smooth", block: "start" });
+    const continuous = $("continuous").checked;
+    if (continuous && isConfident(outcome.candidates)) {
+      // Continuous scanning: a sure reading goes straight to the pile and the camera stays
+      // in view for the next card. The variant is still chosen by hand in the pile.
+      const best = Catalogue.card(outcome.candidates[0].cardIndex);
+      ScanLog.choose(currentLogId, best.key);
+      Pile.add(best.key, outcome.reading.language || null);
+      $("scanStatus").textContent = `Nella pila: ${outcome.candidates[0].name || best.name} (${cardLine(best)}). Inquadra la prossima.`;
+      $("scanResult").hidden = true;
+      $("readPanel").hidden = true;
+      if (navigator.vibrate) navigator.vibrate(40);
+    } else {
+      $("scanStatus").textContent = currentLogId === null && ScanLog.enabled()
+        ? `Lettura non salvata nel registro: ${ScanLog.lastError() || "errore sconosciuto"}`
+        : continuous ? "Non sono sicuro: scegli la carta giusta e mettila nella pila." : "Confronta con la tua foto, poi apri la carta giusta.";
+      $("scanResult").scrollIntoView({ behavior: "smooth", block: "start" });
+    }
   } catch (e) {
     $("scanStatus").textContent = "Lettura non riuscita.";
     scanError(`${e.name}: ${e.message}`);
@@ -452,8 +525,101 @@ function logEntry(canvas, outcome) {
       bottom: reading.bottomText ?? null,
     },
     candidates: candidates.map((c) => ({ key: `${c.setId}-${c.number}`, name: c.name, score: round(c.score), evidence: c.evidence })),
+    visual: outcome.visual ? { ms: outcome.visual.ms ?? null, top: outcome.visual.top || [], error: outcome.visual.error || null } : null,
   };
 }
+
+// ---------- Scan pile ----------
+// Cards read one after the other wait here; the owner picks variant and language for each
+// (the variant is never preselected), sets condition and binder once, and adds them together.
+const Pile = (() => {
+  const KEY = "scrinium-pile";
+  let items = []; // [{ key, lang, variant }]
+  try { items = JSON.parse(localStorage.getItem(KEY) || "[]"); } catch (e) { items = []; }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(items)); } catch (e) { /* private browsing */ } };
+  const condition = select([["", "Non indicata"], ...CONDITIONS.map((c) => [c, c])], "NM");
+  let binder = null;
+
+  function add(key, lang) {
+    items.unshift({ key, lang: lang || null, variant: null });
+    save();
+    render();
+  }
+
+  function render() {
+    const panel = $("pilePanel");
+    panel.hidden = !items.length;
+    if (!items.length) return;
+    $("pileTitle").textContent = items.length === 1 ? "Pila: 1 carta" : `Pila: ${items.length} carte`;
+    const list = $("pileList");
+    list.innerHTML = "";
+    items.forEach((item, i) => {
+      const card = Catalogue.cardByKey(item.key);
+      if (!card) return;
+      const known = card.variants.map(Catalogue.parseVariant);
+      const types = new Set(known.map((v) => v.type));
+      const options = [...known, ...["normal", "holo", "reverse"].filter((t) => !types.has(t)).map(Catalogue.parseVariant)];
+      const variant = select([["", "Scegli la variante…"], ...options.map((v) => [v.token, variantLabel(v)])], item.variant || "");
+      variant.addEventListener("change", () => { item.variant = variant.value || null; save(); render(); });
+      const langs = [...new Set([...MAIN_LANGS, ...card.set.langs])];
+      const lang = select(langs.map((l) => [l, LANG_LABELS[l] || l]), item.lang || (card.set.langs.includes("it") || !card.set.langs.length ? "it" : card.set.langs[0]));
+      item.lang = lang.value;
+      lang.addEventListener("change", () => { item.lang = lang.value; save(); });
+      list.appendChild(el("div", { class: item.variant ? "item" : "item need" },
+        el("a", { href: `#/carta/${encodeURIComponent(card.key)}` }, art(card, { lang: item.lang })),
+        el("div", { class: "grow" },
+          el("div", { class: "t", text: card.name }),
+          el("div", { class: "s", text: cardLine(card) }),
+          variant, lang),
+        el("button", { class: "x", text: "×", "aria-label": "Togli dalla pila", onclick: () => { items.splice(i, 1); save(); render(); } })));
+    });
+    save();
+    const binderSelect = select([["", "Nessuno"], ...Store.binders().map((b) => [String(b.id), b.name])], binder ?? (selectedBinder ? String(selectedBinder) : ""));
+    binderSelect.addEventListener("change", () => { binder = binderSelect.value; });
+    binder = binderSelect.value;
+    const fields = $("pileFields");
+    fields.innerHTML = "";
+    fields.append(el("label", { class: "field" }, "Condizione (tutte)", condition), el("label", { class: "field" }, "Raccoglitore", binderSelect));
+    const missing = items.filter((item) => !item.variant).length;
+    $("pileHint").textContent = missing
+      ? `Scegli la variante di ${missing === 1 ? "1 carta" : `${missing} carte`} guardando la carta (timbro 1ª edizione, holo, reverse): lo scanner non la decide.`
+      : "Controlla lingua e variante, poi aggiungi.";
+    $("pileAdd").disabled = Boolean(missing);
+    $("pileAdd").textContent = items.length === 1 ? "Aggiungi 1 carta allo scrigno" : `Aggiungi ${items.length} carte allo scrigno`;
+  }
+
+  function commit() {
+    if (items.some((item) => !item.variant)) return;
+    for (const item of items) {
+      const v = Catalogue.parseVariant(item.variant);
+      Store.addCopy({
+        card_source_id: item.key, lang: item.lang,
+        variant_type: v.type, variant_subtype: v.subtype, variant_stamps: v.stamps.join(",") || null,
+        variant_foil: v.foil, variant_size: v.size,
+        variant_confirmed: true, // chosen by the owner in the pile
+        condition: condition.value || null, binder_id: binder ? Number(binder) : null, quantity: 1,
+      });
+    }
+    const n = items.length;
+    items = [];
+    save();
+    render();
+    $("scanStatus").textContent = n === 1 ? "1 carta aggiunta allo scrigno." : `${n} carte aggiunte allo scrigno.`;
+  }
+
+  function clear() {
+    items = [];
+    save();
+    render();
+  }
+
+  return { add, render, commit, clear, has: (key) => items.some((item) => item.key === key), size: () => items.length };
+})();
+
+$("pileAdd").addEventListener("click", () => Pile.commit());
+$("pileClear").addEventListener("click", () => {
+  if (Pile.size() && window.confirm("Svuoto la pila? Le carte non aggiunte si perdono.")) Pile.clear();
+});
 
 $("noneRight").addEventListener("click", () => {
   ScanLog.choose(currentLogId, "none");
