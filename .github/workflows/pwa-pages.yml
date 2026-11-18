@@ -39,6 +39,21 @@ jobs:
           git clone --depth 1 https://github.com/tcgdex/cards-database.git "$RUNNER_TEMP/tcgdex"
           python3 etl/build_catalogue.py "$RUNNER_TEMP/tcgdex" --out "$RUNNER_TEMP/catalogue.sqlite"
           python3 etl/export_scan_index.py "$RUNNER_TEMP/catalogue.sqlite" --out web/data/scan-index.json
+      # Prices: today's Cardmarket price guide (published file, no account) and the history that
+      # prices.yml keeps as release assets. Without them the app simply shows no prices.
+      - name: Prices
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/prices" "$RUNNER_TEMP/prices-history"
+          gh release download prices-history -p 'history-*.json.gz' -D "$RUNNER_TEMP/prices-history" || echo "no price history yet"
+          if python3 etl/prices/cardmarket_prices.py fetch --out "$RUNNER_TEMP/prices"; then
+            python3 etl/prices/cardmarket_prices.py phone --guide "$RUNNER_TEMP/prices/price_guide_6.json" \
+              --sealed "$RUNNER_TEMP/prices/products_nonsingles_6.json" --index web/data/scan-index.json \
+              --history-dir "$RUNNER_TEMP/prices-history" --out web/data
+          else
+            echo "::warning::Cardmarket price guide not reachable: this deployment has no prices"
+          fi
       # Addresses of the images on the official card sites (Japan, Korea, Taiwan), from the
       # facts collected by official-sources.yml. Only addresses: the phone loads the images there.
       - name: Map official images

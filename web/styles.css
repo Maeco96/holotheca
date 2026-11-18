@@ -80,7 +80,7 @@ h2 { margin: 8px 0 -4px; font: 600 18px/1.2 var(--serif); }
 .fields .wide { grid-column: 1 / -1; }
 
 /* ---------- Summary and grid (Scrigno) ---------- */
-.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; }
 .stat b { display: block; font: 600 22px/1.1 var(--serif); color: var(--brass); }
 .stat span { font-size: 12px; color: var(--muted); }
@@ -239,3 +239,24 @@ pre.debug { font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap
 /* an expansion without a logo shows its first card instead */
 .logo.cover img { max-height: 100%; width: auto; border-radius: 4px; }
 .sethead .logo.cover { height: 150px; }
+
+/* ---------- Prices ---------- */
+.btn.small { padding: 7px 10px; font-size: 13px; border-radius: 10px; }
+.up { color: var(--good); }
+.down { color: var(--bad); }
+.pricerow { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.prices > .pricerow:first-of-type, .prices .muted + .pricerow { border-top: 0; }
+.pricerow b { font: 600 18px/1.1 var(--serif); color: var(--brass); }
+.chart { display: block; width: 100%; height: auto; margin-top: 10px; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .line.main { stroke: var(--brass); }
+.chart .line.alt { stroke: var(--muted); stroke-dasharray: 4 4; }
+.chart .lbl { fill: var(--muted); font: 10px var(--sans); }
+.legend { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.legend .key { display: inline-block; width: 16px; height: 0; border-top: 2px solid var(--brass); }
+.legend .key.alt { border-top: 2px dashed var(--muted); margin-left: 8px; }
+#valuePanel:empty { display: none; }
+#sealedList:empty { display: none; }
+#sealedPicker { display: flex; flex-direction: column; gap: 10px; }
+#sealedPicker[hidden] { display: none; }
