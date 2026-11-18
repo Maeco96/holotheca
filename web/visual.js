@@ -106,14 +106,21 @@ const HolothecaVisual = (() => {
         ]);
         const n = meta.keys.length;
         const dim = meta.dim;
+        const bits = meta.bits || 8;
         index = {
-          keys: meta.keys, dim, method: meta.method,
-          rows: new Int8Array(rows, 0, n * dim),
-          scales: new Float32Array(rows.slice(n * dim, n * dim + n * 4)),
+          keys: meta.keys, dim, bits, method: meta.method,
           pos: new Map(meta.keys.map((k, i) => [k, i])),
           mean: meta.mean ? Float32Array.from(meta.mean) : null,
           basis: meta.basis ? Float32Array.from(meta.basis) : null, // [dim x source dim], row-major
         };
+        if (bits === 1) {
+          // Signs packed as bits (numpy packbits: first number in the highest bit of each byte).
+          index.bytesPerRow = dim / 8;
+          index.signs = new Uint8Array(rows, 0, n * index.bytesPerRow);
+        } else {
+          index.rows = new Int8Array(rows, 0, n * dim);
+          index.scales = new Float32Array(rows.slice(n * dim, n * dim + n * 4));
+        }
         session = await ort.InferenceSession.create(absolute("vendor/visual/dinov2s-int8.onnx"), { executionProviders: ["wasm"] });
         return true;
       })().catch((e) => { loading = null; throw e; });
@@ -121,25 +128,26 @@ const HolothecaVisual = (() => {
     return loading;
   }
 
+  const POPCOUNT = new Uint8Array(256).map((_, i) => { let c = 0; for (let v = i; v; v >>= 1) c += v & 1; return c; });
+
   /** Query vector of a photo in the space of the index. */
   async function embed(ort, photo) {
     const card = findCard(photo);
+    // The index says which parts make its vector (for example "art" or "full+art"); "...cls" is
+    // the class token alone. Only the regions it uses go through the model.
+    const names = index.method.split("+");
+    const regions = [...new Set(names.map((name) => name.replace(/cls$/, "")))];
     const plane = 3 * SIZE * SIZE;
-    const input = new Float32Array(2 * plane);
-    tensorInto(input, 0, card, [0, 0, 1, 1]);
-    tensorInto(input, plane, card, ART);
-    const result = await session.run({ pixels: new ort.Tensor("float32", input, [2, 3, SIZE, SIZE]) });
+    const input = new Float32Array(regions.length * plane);
+    regions.forEach((region, r) => tensorInto(input, r * plane, card, region === "art" ? ART : [0, 0, 1, 1]));
+    const result = await session.run({ pixels: new ort.Tensor("float32", input, [regions.length, 3, SIZE, SIZE]) });
     const out = result.embedding.data;
-    const half = out.length / 2;
-    const quarter = half / 2;
-    // Each half is [class token | mean of patches]; "fullcls" and "artcls" are the class tokens alone.
-    const parts = {
-      full: out.subarray(0, half), art: out.subarray(half),
-      fullcls: out.subarray(0, quarter), artcls: out.subarray(half, half + quarter),
-    };
-    // The index says which parts make its vector (for example "full+art"), then an optional
-    // projection to fewer dimensions.
-    const pieces = index.method.split("+").map((name) => parts[name]);
+    const width = out.length / regions.length;
+    // Each region's vector is [class token | mean of patches].
+    const pieces = names.map((name) => {
+      const r = regions.indexOf(name.replace(/cls$/, ""));
+      return out.subarray(r * width, r * width + (name.endsWith("cls") ? width / 2 : width));
+    });
     let vec = new Float32Array(pieces.reduce((s, p) => s + p.length, 0));
     let o = 0;
     for (const p of pieces) { vec.set(p, o); o += p.length; }
@@ -157,23 +165,37 @@ const HolothecaVisual = (() => {
     for (const v of vec) norm += v * v;
     norm = Math.sqrt(norm) || 1;
     for (let i = 0; i < vec.length; i++) vec[i] /= norm;
-    return { vec, card };
+    let signs = null;
+    if (index.bits === 1) {
+      signs = new Uint8Array(index.bytesPerRow);
+      for (let i = 0; i < vec.length; i++) if (vec[i] > 0) signs[i >> 3] |= 0x80 >> (i & 7);
+    }
+    return { vec, signs, card };
   }
 
-  function similarity(vec, i) {
+  /** Similarity of the query to card i: cosine for int8 rows; for sign bits, the share of equal
+   * bits mapped to [-1, 1] (about 1 - 2·angle/π: lower than the cosine of the same pair). */
+  function similarity(query, i) {
+    if (index.bits === 1) {
+      const { signs, bytesPerRow } = index;
+      const base = i * bytesPerRow;
+      let diff = 0;
+      for (let b = 0; b < bytesPerRow; b++) diff += POPCOUNT[signs[base + b] ^ query.signs[b]];
+      return 1 - (2 * diff) / index.dim;
+    }
     const { rows, dim, scales } = index;
     let s = 0;
     const base = i * dim;
-    for (let d = 0; d < dim; d++) s += vec[d] * rows[base + d];
+    for (let d = 0; d < dim; d++) s += query.vec[d] * rows[base + d];
     return s * scales[i];
   }
 
   /** The k most similar cards: [{ key, similarity }]. */
-  function search(vec, k = 10) {
+  function search(query, k = 10) {
     const n = index.keys.length;
     const best = [];
     for (let i = 0; i < n; i++) {
-      const s = similarity(vec, i);
+      const s = similarity(query, i);
       if (best.length < k || s > best[best.length - 1].similarity) {
         best.push({ i, similarity: s });
         best.sort((a, b) => b.similarity - a.similarity);
@@ -184,9 +206,9 @@ const HolothecaVisual = (() => {
   }
 
   /** Similarity of the photo to given cards (by key); null for cards the index lacks. */
-  function similarityOf(vec, key) {
+  function similarityOf(query, key) {
     const i = index.pos.get(key);
-    return i === undefined ? null : similarity(vec, i);
+    return i === undefined ? null : similarity(query, i);
   }
 
   return { load, embed, search, similarityOf, findCard, ready: () => Boolean(session && index) };

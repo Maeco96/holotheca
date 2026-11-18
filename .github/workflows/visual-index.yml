@@ -86,7 +86,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 etl/visual/phone_index.py visual --method "${VISUAL_METHOD:-full+art}" --dims "${VISUAL_DIMS:-256}" --out "$RUNNER_TEMP/visual-index"
+          python3 etl/visual/phone_index.py visual --method art --bits 1 --out "$RUNNER_TEMP/visual-index"
           gh release view visual-index > /dev/null 2>&1 || gh release create visual-index --title "Visual index" \
             --notes "Image vectors of the catalogue for the scanner's visual fallback. Built by .github/workflows/visual-index.yml; numbers only, no images." --latest=false
           gh release upload visual-index "$RUNNER_TEMP/visual-index.json" "$RUNNER_TEMP/visual-index.bin" --clobber

@@ -6,7 +6,9 @@ optionally projected on the --dims main directions of the catalogue (PCA), norma
 stored as int8 with one float scale per card. The page repeats the same steps on the photo
 (web/visual.js), using the mean and the projection stored in the JSON file.
 
-Output: <out>.json {keys, dim, method, mean?, basis?} and <out>.bin (int8 [n, dim] then float32 [n]).
+Output: <out>.json {keys, dim, bits, method, mean?, basis?} and <out>.bin: with --bits 8, int8 [n, dim]
+then float32 scales [n]; with --bits 1, the sign of every number packed as bits, [n, dim / 8] bytes
+(compared by counting equal bits; measured on real photos as good as int8 for the artwork).
 
 Usage: python3 etl/visual/phone_index.py build/visual --method full+art --dims 256 --out web/data/visual-index
 """
@@ -61,6 +63,7 @@ def main() -> None:
     ap.add_argument("index", type=Path)
     ap.add_argument("--method", default="full+art")
     ap.add_argument("--dims", type=int, default=0, help="PCA dimensions, 0 = keep all")
+    ap.add_argument("--bits", type=int, choices=(1, 8), default=1)
     ap.add_argument("--out", type=Path, required=True)
     args = ap.parse_args()
     meta, parts = load(args.index)
@@ -68,17 +71,20 @@ def main() -> None:
     mean = basis = None
     if args.dims:
         mean, basis = fit(x, args.dims)
-    q, scale = quantize(project(x, mean, basis))
+    x = project(x, mean, basis)
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    head = {"keys": meta["keys"], "dim": int(q.shape[1]), "method": args.method, "model": meta.get("model"), "built_at": meta.get("built_at")}
+    head = {"keys": meta["keys"], "dim": int(x.shape[1]), "bits": args.bits, "method": args.method, "model": meta.get("model"), "built_at": meta.get("built_at")}
     if basis is not None:
         head["mean"] = [round(float(v), 6) for v in mean]
         head["basis"] = [round(float(v), 6) for v in basis.flatten()]
+    if args.bits == 1:
+        payload = np.packbits(x > 0, axis=1).tobytes()
+    else:
+        q, scale = quantize(x)
+        payload = q.tobytes() + scale.tobytes()
     args.out.with_suffix(".json").write_text(json.dumps(head, separators=(",", ":")), encoding="utf-8")
-    with open(args.out.with_suffix(".bin"), "wb") as f:
-        f.write(q.tobytes())
-        f.write(scale.tobytes())
-    print(f"{len(meta['keys'])} cards x {q.shape[1]} -> {args.out}.bin {(q.nbytes + scale.nbytes) / 1e6:.1f} MB")
+    args.out.with_suffix(".bin").write_bytes(payload)
+    print(f"{len(meta['keys'])} cards x {x.shape[1]} at {args.bits} bit -> {args.out}.bin {len(payload) / 1e6:.1f} MB")
 
 
 if __name__ == "__main__":

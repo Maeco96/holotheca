@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.12.2";
+const VERSION = "0.14.0";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -318,10 +318,12 @@ async function recognizeCanvas(canvas) {
   return { reading, candidates, readMs, matchMs: 0, catalogue: Boolean(index), visual };
 }
 
-// Visual fallback. A similarity (cosine of the image vectors) maps to a score between these:
-// below VISUAL_LOW a picture says nothing, at VISUAL_HIGH it is as good as a full text match.
-const VISUAL_LOW = 0.35;
-const VISUAL_HIGH = 0.8;
+// Visual fallback. A similarity (share of equal sign bits of the artwork vectors, as -1..1)
+// maps to a score between these: below VISUAL_LOW a picture says nothing, at VISUAL_HIGH it is
+// as good as a full text match. Measured on the first scan log (docs/visual/probe.md): the right
+// card scored about 0.57-0.76, the best wrong card 0.48-0.66 (cosine 0.78-0.93 and 0.68-0.86).
+const VISUAL_LOW = 0.45;
+const VISUAL_HIGH = 0.75;
 const visualScore = (similarity) => Math.max(0, Math.min(1, (similarity - VISUAL_LOW) / (VISUAL_HIGH - VISUAL_LOW)));
 
 /**
@@ -334,12 +336,12 @@ async function compareImage(canvas, candidates) {
   await HolothecaVisual.load(ort, absolute);
   $("scanStatus").textContent = "Confronto l'immagine con il catalogo…";
   const t0 = performance.now();
-  const { vec } = await HolothecaVisual.embed(ort, canvas);
-  const top = HolothecaVisual.search(vec, 8);
+  const query = await HolothecaVisual.embed(ort, canvas);
+  const top = HolothecaVisual.search(query, 8);
   const byKey = new Map();
   for (const c of candidates) {
     const key = `${c.setId}-${c.number}`;
-    const similarity = HolothecaVisual.similarityOf(vec, key);
+    const similarity = HolothecaVisual.similarityOf(query, key);
     const v = similarity === null ? 0 : visualScore(similarity);
     byKey.set(key, { ...c, similarity, score: Math.min(1, c.score * 0.6 + v * 0.4 + (v > 0.5 ? 0.1 : 0)), evidence: v > 0.5 ? [...c.evidence, "image"] : c.evidence });
   }
