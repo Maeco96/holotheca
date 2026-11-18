@@ -18,7 +18,7 @@ import re
 import sqlite3
 import sys
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from tcgdex_coverage import LANGUAGE_NAMES, git_revision
@@ -401,7 +401,47 @@ class Builder:
                         self.db.execute("INSERT INTO card_search (name, card_id, lang) VALUES (?, ?, ?)", (rec["name"], card_id, lang))
                         self.stats["names"] += 1
                         added["names"] += 1
+        self.estimate_official_dates(directory)
         return added
+
+    def estimate_official_dates(self, directory: Path) -> int:
+        """Give the official-only Japanese sets an approximate release date.
+
+        The Japanese site numbers its cards in the order they were published, so the smallest
+        card id of a set places it between two sets whose release date TCGdex knows; the date is
+        interpolated linearly. These dates are estimates, the app shows them as such (series
+        'official').
+        """
+        path = directory / "ja.json"
+        if not path.is_file():
+            return 0
+        first: dict[str, int] = {}
+        for card_id, rec in json.loads(path.read_text(encoding="utf-8")).items():
+            code, number = str(rec.get("set") or ""), str(card_id)
+            if code and number.isdigit():
+                first[code.lower()] = min(first.get(code.lower(), 10**9), int(number))
+        known = []
+        for set_id, source_id, release in self.db.execute("SELECT id, source_id, release_date FROM sets WHERE release_date IS NOT NULL AND series_id <> 'official'"):
+            if source_id.lower() in first:
+                known.append((first[source_id.lower()], date.fromisoformat(release[:10]).toordinal()))
+        known.sort()
+        if len(known) < 2:
+            return 0
+        done = 0
+        for set_id, source_id in self.db.execute("SELECT id, source_id FROM sets WHERE series_id = 'official' AND release_date IS NULL").fetchall():
+            start = first.get(source_id.lower())
+            if start is None:
+                continue
+            below = [k for k in known if k[0] <= start]
+            above = [k for k in known if k[0] > start]
+            if below and above:
+                (a, da), (b, db_) = below[-1], above[0]
+                day = da + (db_ - da) * (start - a) / (b - a)
+            else:
+                continue
+            self.db.execute("UPDATE sets SET release_date = ? WHERE id = ?", (date.fromordinal(round(day)).isoformat(), set_id))
+            done += 1
+        return done
 
     def apply_overrides(self, path: Path) -> int:
         """Apply etl/overrides/external_ids.csv. Columns: card_source_id, provider, external_id, variant_type.

@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.12.2";
+const VERSION = "0.13.0";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -525,7 +525,7 @@ function monthYear(iso) {
 function setTile(set, owned) {
   const have = owned.get(set.id) || 0;
   return el("button", { class: "settile", onclick: () => { setFilter = "all"; location.hash = `#/cerca/${encodeURIComponent(set.id)}`; } },
-    el("div", { class: "top" }, setLogo(set, searchLang), set.releaseDate ? el("span", { class: "date", text: monthYear(set.releaseDate) }) : null),
+    el("div", { class: "top" }, setLogo(set, searchLang), set.releaseDate ? el("span", { class: "date", text: `${set.series === "official" ? "≈ " : ""}${monthYear(set.releaseDate)}` }) : null),
     el("div", { class: "nm", text: set.name }),
     el("div", { class: "meta" },
       el("span", { text: `${set.code ? `${set.code} · ` : ""}${set.cards} carte` }),
@@ -576,7 +576,7 @@ function renderSetPage(body, setId, owned) {
     el("button", { class: "chip", text: "‹ Espansioni", onclick: () => { location.hash = "#/cerca"; } }),
     setLogo(set, lang),
     el("h2", { text: set.name }),
-    el("div", { class: "muted small", text: [set.code, formatDate(set.releaseDate), `${cards.length} carte`,
+    el("div", { class: "muted small", text: [set.code, set.releaseDate ? `${set.series === "official" ? "circa " : ""}${formatDate(set.releaseDate)}` : "",  `${cards.length} carte`,
       set.langs.map((code) => LANG_LABELS[code] || code).join(", ")].filter(Boolean).join(" · ") }),
     el("div", { class: "progress" },
       el("div", { class: "bar big" }, el("i", { style: `width:${cards.length ? Math.round((have / cards.length) * 100) : 0}%` })),
@@ -597,7 +597,7 @@ function renderSetPage(body, setId, owned) {
       el("button", { class: owns ? "tile" : "tile missing", onclick: () => { location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
         art(card, { lang }),
         owns ? el("span", { class: "qty", text: "✓" }) : null,
-        el("div", { class: "cap", text: `${card.number} ${card.name}` })));
+        el("div", { class: "cap", text: `${card.number} ${Catalogue.nameIn(card, lang)}` })));
   }
   body.appendChild(grid);
   if (!grid.children.length) body.appendChild(el("p", { class: "muted", text: "Nessuna carta in questo elenco." }));
@@ -622,7 +622,7 @@ function renderTextResults(body, text, owned) {
       el("button", { class: "item", onclick: () => { location.hash = `#/carta/${encodeURIComponent(card.key)}`; } },
         art(card, { lang: searchLang || null }),
         el("div", { class: "grow" },
-          el("div", { class: "t", text: card.name }),
+          el("div", { class: "t", text: Catalogue.nameIn(card, searchLang || null) }),
           el("div", { class: "s", text: cardLine(card) }),
           card.rarity ? el("div", { class: "s", text: card.rarity }) : null)));
   }
