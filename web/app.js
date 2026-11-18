@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.12.0";
+const VERSION = "0.12.2";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -489,14 +489,30 @@ function setLogo(set, lang) {
   const box = el("div", { class: "logo" });
   const fallback = el("span", { class: "code", text: set.code });
   box.appendChild(fallback);
-  const urls = Catalogue.setLogos(set, lang || null);
-  if (!urls.length) return box;
+  // The logo first; when the source has none, the picture of the first cards of the expansion.
+  let urls = Catalogue.setLogos(set, lang || null);
+  let cover = false;
   let attempt = 0;
   const img = el("img", { alt: set.name, loading: "lazy", decoding: "async", class: "loading" });
+  const useCover = () => {
+    if (cover) return false;
+    cover = true;
+    urls = Catalogue.coverImages(set, lang || null);
+    attempt = 0;
+    if (!urls.length) return false;
+    box.classList.add("cover");
+    img.src = urls[0];
+    return true;
+  };
   img.addEventListener("load", () => { img.classList.remove("loading"); fallback.remove(); });
-  img.addEventListener("error", () => { attempt += 1; if (attempt < urls.length) img.src = urls[attempt]; });
-  img.src = urls[0];
+  img.addEventListener("error", () => {
+    attempt += 1;
+    if (attempt < urls.length) img.src = urls[attempt];
+    else useCover();
+  });
   box.appendChild(img);
+  if (urls.length) img.src = urls[0];
+  else if (!useCover()) img.remove();
   return box;
 }
 

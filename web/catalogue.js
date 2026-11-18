@@ -207,6 +207,21 @@ const Catalogue = (() => {
       .replace("/{number}", "/logo.webp"));
   }
 
+  /** Pictures of the first cards of an expansion, to stand in for a missing logo. */
+  function coverImages(set, preferred = null, count = 3) {
+    if (!index) return [];
+    const raw = index.raw;
+    const setIndex = raw.sets.findIndex((row) => row[0] === set.id);
+    const out = [];
+    let taken = 0;
+    for (let i = 0; i < raw.cards.length && taken < count; i++) {
+      if (raw.cards[i][0] !== setIndex) continue;
+      taken++;
+      out.push(...images(card(i), "low", preferred).map((image) => image.url));
+    }
+    return out;
+  }
+
   /**
    * Search by name in any language, optionally with a number: "gothitelle", "eevee 54", "92/193".
    * Newest sets first. `filter` narrows by expansion ({ setId }) and by the language the
@@ -254,5 +269,5 @@ const Catalogue = (() => {
     return found.slice(0, limit).map(card);
   }
 
-  return { load, info, card, cardByKey, images, parseVariant, links, search, sets, cardsOfSet, setLogos, prepared: () => index };
+  return { load, info, card, cardByKey, images, parseVariant, links, search, sets, cardsOfSet, setLogos, coverImages, prepared: () => index };
 })();
