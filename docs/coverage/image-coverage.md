@@ -1,6 +1,6 @@
 # Image coverage
 
-Cards: 50590; with a TCGdex image: 30893; only an official image: 13437; no image at all: 6260.
+Cards: 50590; with a TCGdex image: 30943; only an official image: 13387; no image at all: 6260.
 Expansion logos missing: 258 of 407.
 
 | set | name | cards | TCGdex image | official only | none | logo |
@@ -186,7 +186,7 @@ Expansion logos missing: 258 of 407.
 | S11 | ロストアビス | 127 | 127 | 0 | 0 | False |
 | S11a | 白熱のアルカナ | 94 | 94 | 0 | 0 | False |
 | S12 | パラダイムトリガー | 125 | 125 | 0 | 0 | False |
-| S12a | VSTARユニバース | 262 | 204 | 58 | 0 | False |
+| S12a | VSTARユニバース | 262 | 254 | 8 | 0 | False |
 | S1H | シールド | 68 | 68 | 0 | 0 | False |
 | S1W | ソード | 68 | 68 | 0 | 0 | False |
 | S1a | VMAXライジング | 78 | 78 | 0 | 0 | False |
