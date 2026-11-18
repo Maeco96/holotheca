@@ -13,8 +13,15 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Ninth pass: what the Korean card page sends for the Pokémon tab (hp / retreat fields)
-    "https://pokemoncard.co.kr/cards#grep=get_more_cards|name=\"hp\"|name=\"retreat\"|id=\"hp|retreat|\\.js|CardTypeNum|slider|range",
+    # Tenth pass: sources for Japanese vintage scans (PMCG, Neo, VS, e-Card, PCG)
+    "https://bulbapedia.bulbagarden.net/robots.txt",
+    "https://bulbapedia.bulbagarden.net/wiki/Expansion_Pack_(TCG)",
+    "https://bulbapedia.bulbagarden.net/wiki/Bulbapedia:Copyrights",
+    "https://tcgcollector.com/robots.txt",
+    "https://www.tcgcollector.com/sets/jp",
+    "https://www.tcgcollector.com/terms",
+    "https://www.pkmncollectors.com/robots.txt",
+    "https://pokumon.com/about/",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
