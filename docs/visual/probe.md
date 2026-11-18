@@ -1,6 +1,6 @@
 # Visual index probe
 
-Index: 30943 cards (dinov2s-int8.onnx, built 2026-11-18T10:03:26Z); 19647 cards without an image. Photos: 14.
+Index: 30943 cards (dinov2s-int8.onnx, built 2026-11-18T10:17:00Z); 19647 cards without an image. Photos: 14.
 
 Similarity (cosine, int8) of the right card and of the best wrong card, cut "find":
 
