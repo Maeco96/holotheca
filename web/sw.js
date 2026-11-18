@@ -5,7 +5,7 @@
 const CACHE = "holotheca-dev";
 const VENDOR_CACHE = "holotheca-vendor-2";
 const SHELL = [
-  "./", "index.html", "styles.css", "app.js", "recognize.js", "catalogue.js", "store.js", "camera.js", "scanlog.js",
+  "./", "index.html", "styles.css", "app.js", "recognize.js", "catalogue.js", "store.js", "prices.js", "camera.js", "scanlog.js",
   "manifest.webmanifest",
   "icon-192.png", "icon-512.png", "apple-touch-icon.png",
 ];
@@ -33,6 +33,21 @@ self.addEventListener("fetch", (event) => {
 
   const isVendor = url.pathname.includes("/vendor/");
   const isData = url.pathname.includes("/data/");
+  // Prices change every day: network first, the cached copy only offline.
+  if (/\/data\/prices/.test(url.pathname)) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request).then((hit) => hit || Response.error()))
+    );
+    return;
+  }
   event.respondWith(
     caches.match(request).then((hit) => {
       if (hit) return hit;

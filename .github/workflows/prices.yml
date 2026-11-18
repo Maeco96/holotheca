@@ -1,0 +1,55 @@
+name: Prices
+
+# Once a day: downloads Cardmarket's published price guide for Pokémon
+# (https://www.cardmarket.com/Data/Download, no account, no API), adds the day to the price
+# history kept as assets of the release "prices-history", then redeploys the app so the phone
+# gets the new prices. A push to a branch only checks that the files still parse.
+on:
+  schedule:
+    - cron: "40 3 * * *"   # Cardmarket writes the guide at about 01:50 UTC
+  push:
+    paths:
+      - "etl/prices/cardmarket_prices.py"
+      - ".github/workflows/prices.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write   # release assets of "prices-history"
+  actions: write    # starts the Pages deployment
+
+concurrency:
+  group: prices
+  cancel-in-progress: false
+
+jobs:
+  prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: prices-history
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Download the price guide
+        run: python3 etl/prices/cardmarket_prices.py fetch --out "$RUNNER_TEMP/guide"
+      - name: Add the day to the history
+        run: |
+          mkdir -p "$RUNNER_TEMP/history"
+          gh release download "$TAG" -p 'history-*.json.gz' -D "$RUNNER_TEMP/history" || echo "no history yet"
+          python3 etl/prices/cardmarket_prices.py history --guide "$RUNNER_TEMP/guide/price_guide_6.json" --history-dir "$RUNNER_TEMP/history"
+          ls -la "$RUNNER_TEMP/history"
+      - name: Keep the history
+        if: github.ref == 'refs/heads/main'
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --latest=false --title "Price history" \
+              --notes "Daily Cardmarket trend prices (normal and reverse) of every Pokémon product, one file per month, written by .github/workflows/prices.yml. Source: the price guide Cardmarket publishes for its users."
+          fi
+          month=$(ls -t "$RUNNER_TEMP"/history/history-*.json.gz | head -1)
+          gh release upload "$TAG" "$month" --clobber
+      - name: Redeploy the app
+        if: github.ref == 'refs/heads/main'
+        run: gh workflow run pwa-pages.yml --ref main

@@ -51,10 +51,19 @@
       <div class="summary">
         <div class="stat"><b id="statTotal">0</b><span>carte</span></div>
         <div class="stat"><b id="statDistinct">0</b><span>diverse</span></div>
+        <div class="stat"><b id="statValue">–</b><span>valore</span></div>
         <div class="stat"><b id="statSpent">–</b><span>spesi</span></div>
       </div>
       <div class="chiprow" id="binderChips"></div>
+      <div class="panel" id="valuePanel"></div>
       <div class="grid" id="collectionGrid"></div>
+      <h2 id="sealedHead" hidden>Sigillati</h2>
+      <div class="panel list" id="sealedList"></div>
+      <button class="btn ghost block" id="sealedOpen">Aggiungi un prodotto sigillato</button>
+      <div id="sealedPicker" hidden>
+        <div class="field"><input id="sealedSearch" type="search" placeholder="Nome del prodotto su Cardmarket" autocomplete="off"></div>
+        <div class="list" id="sealedResults"></div>
+      </div>
       <div class="panel empty" id="collectionEmpty" hidden>
         <svg><use href="#i-chest"/></svg>
         <p>Lo scrigno è vuoto. Scansiona una carta o cercala per nome.</p>
@@ -147,7 +156,7 @@
         <ol>
           <li>Apri la scheda della carta, da una scansione o dalla ricerca.</li>
           <li>In "Aggiungi una copia" scegli variante, lingua e condizione guardando la carta vera.</li>
-          <li>Se vuoi indica raccoglitore, prezzo pagato e una nota.</li>
+          <li>Se vuoi indica raccoglitore, prezzo pagato con la data d'acquisto e una nota. Per una carta gradata scegli l'ente, scrivi il voto e il valore che le dai.</li>
           <li>Tocca "Aggiungi allo scrigno".</li>
         </ol>
         <p class="muted small">Copie identiche si sommano. In "Nel tuo scrigno" usi + e − per cambiare la quantità; a zero la copia viene tolta. Condizioni: MT perfetta, NM quasi perfetta, EX eccellente, GD buona, LP poco giocata, PL giocata, PO rovinata.</p>
@@ -160,7 +169,10 @@
 
       <h2>Prezzi e negozi</h2>
       <div class="panel">
-        <p>L'app non mostra ancora prezzi. Nella scheda i pulsanti aprono la pagina della carta su Cardmarket, TCGplayer e CardTrader; "(ricerca)" vuol dire che si apre una ricerca per nome.</p>
+        <p>I prezzi vengono dalla guida prezzi che Cardmarket pubblica ogni notte. L'app la riceve una volta al giorno insieme al resto: nella scheda vedi il trend della copia normale e della reverse holo, la media dei 30 giorni, il prezzo più basso e il grafico dei giorni passati. Con la rete compare anche il prezzo TCGplayer in dollari, preso da TCGdex.</p>
+        <p>Il valore dello scrigno somma il trend Cardmarket di ogni copia: reverse holo al prezzo della reverse, il resto al prezzo normale. La condizione non cambia il prezzo. Le carte gradate valgono quello che scrivi tu, perché non esiste una fonte gratuita di prezzi per le gradate. Con "Valore" su una copia o su un sigillato puoi sempre scrivere un valore tuo; se lo lasci vuoto torna quello di Cardmarket.</p>
+        <p>Lo Scrigno salva il valore totale una volta per ogni giorno di prezzi e ne disegna l'andamento accanto alla spesa. Il valore resta salvato anche nell'esportazione.</p>
+        <p class="muted small">I pulsanti sotto i prezzi aprono la carta su Cardmarket, TCGplayer e CardTrader. "(ricerca)" vuol dire che si apre una ricerca per nome.</p>
       </div>
 
       <h2>Salvare e ripristinare lo scrigno</h2>
@@ -233,10 +245,11 @@
         <div class="attr"><span>Installata come app</span><span id="standalone"></span></div>
         <div class="attr"><span>Uso senza rete</span><span id="offline">verifica…</span></div>
         <div class="attr"><span>Catalogo</span><span id="catalogueInfo">non caricato</span></div>
+        <div class="attr"><span>Prezzi</span><span id="pricesInfo">non caricati</span></div>
         <div class="attr"><span>Dati salvati</span><span id="storage">verifica…</span></div>
         <div class="attr"><span>Fotocamera</span><span id="cameraInfo" class="small">non avviata</span></div>
       </div>
-      <p class="muted small">Le letture avvengono sul telefono: nessuna foto viene inviata. I dati delle carte vengono da TCGdex. I prezzi non sono inclusi: i pulsanti nella scheda aprono i negozi.</p>
+      <p class="muted small">Le letture avvengono sul telefono: nessuna foto viene inviata. I dati delle carte vengono da TCGdex. I prezzi vengono dalla guida prezzi pubblicata da Cardmarket e, per TCGplayer, da TCGdex.</p>
     </section>
   </main>
 
@@ -250,6 +263,7 @@
   <script src="recognize.js" defer></script>
   <script src="catalogue.js" defer></script>
   <script src="store.js" defer></script>
+  <script src="prices.js" defer></script>
   <script src="camera.js" defer></script>
   <script src="scanlog.js" defer></script>
   <script src="app.js" defer></script>
