@@ -66,9 +66,10 @@ def export(database: Path, out: Path) -> dict:
     names: list[str] = []
     name_index: dict[str, int] = {}
     card_names: dict[int, list[int]] = {}
+    card_name_langs: dict[int, list[list[str]]] = {}  # parallel to card_names: the languages of each name
     # English first, then Italian, then the rest: the first name is the one shown by default.
-    for card_id, name in db.execute(
-        "SELECT card_id, name FROM card_names ORDER BY card_id, "
+    for card_id, name, lang in db.execute(
+        "SELECT card_id, name, lang FROM card_names ORDER BY card_id, "
         "CASE lang WHEN 'en' THEN 0 WHEN 'it' THEN 1 ELSE 2 END, lang"
     ):
         index = name_index.get(name)
@@ -76,8 +77,11 @@ def export(database: Path, out: Path) -> dict:
             index = name_index[name] = len(names)
             names.append(name)
         bucket = card_names.setdefault(card_id, [])
+        langs = card_name_langs.setdefault(card_id, [])
         if index not in bucket:
             bucket.append(index)
+            langs.append([])
+        langs[bucket.index(index)].append(lang)
 
     # One marketplace id per card and provider: the card-level one, else the first variant's.
     external: dict[int, dict[str, str]] = {}
@@ -129,6 +133,7 @@ def export(database: Path, out: Path) -> dict:
             (category or "?")[0],
             numeric(ids.get("cardmarket")), numeric(ids.get("tcgplayer")), numeric(ids.get("cardtrader")),
             kinds,
+            ["+".join(langs) for langs in card_name_langs.get(card_id, [])],
         ])
     db.close()
 

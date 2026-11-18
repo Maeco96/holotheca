@@ -152,7 +152,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(export_scan_index.variant_token("normal", None, None, "cosmos", "jumbo"), "normal:::cosmos:jumbo")
         self.assertEqual(build_catalogue.stamp_slugs(["1st Edition", "1st edition"]), "1st-edition")
         self.assertEqual(len(index["sets"][sets["base1"]]), 8)
-        self.assertEqual(len(charizard), 11)
+        self.assertEqual(len(charizard), 12)
         self.assertEqual(charizard[6], "P")
         self.assertIsInstance(charizard[10], str)
 

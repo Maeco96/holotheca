@@ -77,6 +77,7 @@ const Catalogue = (() => {
       key: `${set[0]}-${row[1]}`,
       name: raw.names[row[3][0]] || "?",
       names: row[3].map((i) => raw.names[i]),
+      nameLangs: row[11] || [],
       number: row[1],
       hp: row[2] || null,
       illustrator: row[4] >= 0 ? raw.illustrators[row[4]] : null,
@@ -93,6 +94,13 @@ const Catalogue = (() => {
         langs: set[5] || [], seriesSource: set[6], source: set[7],
       },
     };
+  }
+
+  /** The card's name in a language when the catalogue has it, else its default name. */
+  function nameIn(c, lang) {
+    if (!lang || !c.nameLangs) return c.name;
+    const at = c.nameLangs.findIndex((langs) => langs.split("+").includes(lang));
+    return at >= 0 && c.names[at] ? c.names[at] : c.name;
   }
 
   function cardByKey(key) {
@@ -269,5 +277,5 @@ const Catalogue = (() => {
     return found.slice(0, limit).map(card);
   }
 
-  return { load, info, card, cardByKey, images, parseVariant, links, search, sets, cardsOfSet, setLogos, coverImages, prepared: () => index };
+  return { load, info, card, cardByKey, nameIn, images, parseVariant, links, search, sets, cardsOfSet, setLogos, coverImages, prepared: () => index };
 })();
