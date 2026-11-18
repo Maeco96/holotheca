@@ -13,15 +13,10 @@ import urllib.request
 UA = "Holotheca-catalogue-check/0.1 (+https://github.com/Maeco96/holotheca)"
 
 URLS = [
-    # Tenth pass: sources for Japanese vintage scans (PMCG, Neo, VS, e-Card, PCG)
-    "https://bulbapedia.bulbagarden.net/robots.txt",
-    "https://bulbapedia.bulbagarden.net/wiki/Expansion_Pack_(TCG)",
-    "https://bulbapedia.bulbagarden.net/wiki/Bulbapedia:Copyrights",
-    "https://tcgcollector.com/robots.txt",
-    "https://www.tcgcollector.com/sets/jp",
-    "https://www.tcgcollector.com/terms",
-    "https://www.pkmncollectors.com/robots.txt",
-    "https://pokumon.com/about/",
+    # Eleventh pass: how Bulbapedia lays out a Japanese set card list
+    "https://bulbapedia.bulbagarden.net/wiki/Gold,_Silver,_to_a_New_World..._(TCG)#grep=Cyndaquil|Totodile|class=\"roundy",
+    "https://bulbapedia.bulbagarden.net/wiki/Expansion_Pack_(TCG)#grep=Kangaskhan|Seadra",
+    "https://bulbapedia.bulbagarden.net/wiki/Neo_Genesis_(TCG)#grep=Typhlosion",
 ]
 FIRST_PASS = [
     # Japan: official card search (The Pokémon Company)
