@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - "etl/prices/probe.py"
+      - "etl/prices/link_probe.py"
       - ".github/workflows/price-probe.yml"
   workflow_dispatch:
 
@@ -21,3 +22,4 @@ jobs:
         with:
           python-version: "3.12"
       - run: python3 etl/prices/probe.py
+      - run: python3 etl/prices/link_probe.py
