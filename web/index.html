@@ -170,9 +170,11 @@
       <h2>Prezzi e negozi</h2>
       <div class="panel">
         <p>I prezzi vengono dalla guida prezzi che Cardmarket pubblica ogni notte. L'app la riceve una volta al giorno insieme al resto: nella scheda vedi il trend della copia normale e della reverse holo, la media dei 30 giorni, il prezzo più basso e il grafico dei giorni passati. Con la rete compare anche il prezzo TCGplayer in dollari, preso da TCGdex.</p>
-        <p>Il valore dello scrigno somma il trend Cardmarket di ogni copia: reverse holo al prezzo della reverse, il resto al prezzo normale. La condizione non cambia il prezzo. Le carte gradate valgono quello che scrivi tu, perché non esiste una fonte gratuita di prezzi per le gradate. Con "Valore" su una copia o su un sigillato puoi sempre scrivere un valore tuo; se lo lasci vuoto torna quello di Cardmarket.</p>
+        <p>Con CardTrader attivo (serve il tuo token, vedi sotto) la scheda mostra anche l'offerta più bassa per ogni lingua e condizione, e il valore di ogni copia diventa quello della sua lingua e della sua condizione: per esempio un'italiana NM vale l'offerta italiana NM più bassa. Se nessuno vende la tua condizione si prende la più vicina, e se nessuno vende la tua lingua si torna al trend Cardmarket. Accanto al valore è sempre scritto da dove viene.</p>
+        <p>Senza CardTrader il valore dello scrigno somma il trend Cardmarket di ogni copia: reverse holo al prezzo della reverse, il resto al prezzo normale, e la condizione non cambia il prezzo. Le carte gradate valgono quello che scrivi tu, perché non esiste una fonte gratuita di prezzi per le gradate. Con "Valore" su una copia o su un sigillato puoi sempre scrivere un valore tuo; se lo lasci vuoto torna quello di Cardmarket.</p>
         <p>Lo Scrigno salva il valore totale una volta per ogni giorno di prezzi e ne disegna l'andamento accanto alla spesa. Il valore resta salvato anche nell'esportazione.</p>
-        <p class="muted small">I pulsanti sotto i prezzi aprono la carta su Cardmarket, TCGplayer e CardTrader. "(ricerca)" vuol dire che si apre una ricerca per nome.</p>
+        <p class="muted small">I pulsanti sotto i prezzi aprono Cardmarket (ricerca per nome dentro l'espansione della carta), TCGplayer e CardTrader. "(ricerca)" vuol dire che si apre una ricerca per nome.</p>
+        <p class="muted small">Attivare CardTrader: su CardTrader, impostazioni del profilo, sezione API, copia il token; su GitHub, nel repository holotheca, Settings, Secrets and variables, Actions, "New repository secret" con nome CARDTRADER_TOKEN. Dalla notte dopo i prezzi per lingua e condizione arrivano da soli.</p>
       </div>
 
       <h2>Salvare e ripristinare lo scrigno</h2>

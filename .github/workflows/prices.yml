@@ -10,6 +10,7 @@ on:
   push:
     paths:
       - "etl/prices/cardmarket_prices.py"
+      - "etl/prices/cardtrader_prices.py"
       - ".github/workflows/prices.yml"
   workflow_dispatch:
 
@@ -24,7 +25,7 @@ concurrency:
 jobs:
   prices:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     env:
       GH_TOKEN: ${{ github.token }}
       TAG: prices-history
@@ -41,6 +42,14 @@ jobs:
           gh release download "$TAG" -p 'history-*.json.gz' -D "$RUNNER_TEMP/history" || echo "no history yet"
           python3 etl/prices/cardmarket_prices.py history --guide "$RUNNER_TEMP/guide/price_guide_6.json" --history-dir "$RUNNER_TEMP/history"
           ls -la "$RUNNER_TEMP/history"
+      # Offers by language and condition. Needs the repository secret CARDTRADER_TOKEN (free, from
+      # the CardTrader profile); without it the step does nothing. A branch push reads 3 expansions.
+      - name: CardTrader offers
+        continue-on-error: true
+        env:
+          CARDTRADER_TOKEN: ${{ secrets.CARDTRADER_TOKEN }}
+          LIMIT: ${{ github.ref != 'refs/heads/main' && '--limit 3' || '' }}
+        run: python3 etl/prices/cardtrader_prices.py collect --out "$RUNNER_TEMP/ct/cardtrader-latest.json.gz" $LIMIT
       - name: Keep the history
         if: github.ref == 'refs/heads/main'
         run: |
@@ -50,6 +59,9 @@ jobs:
           fi
           month=$(ls -t "$RUNNER_TEMP"/history/history-*.json.gz | head -1)
           gh release upload "$TAG" "$month" --clobber
+          if [ -f "$RUNNER_TEMP/ct/cardtrader-latest.json.gz" ]; then
+            gh release upload "$TAG" "$RUNNER_TEMP/ct/cardtrader-latest.json.gz" --clobber
+          fi
       - name: Redeploy the app
         if: github.ref == 'refs/heads/main'
         run: gh workflow run pwa-pages.yml --ref main

@@ -83,3 +83,29 @@ class PhoneTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+import cardtrader_prices as ct  # noqa: E402
+
+
+class CardTraderTests(unittest.TestCase):
+    def offer(self, cents, lang="it", cond="Near Mint", reverse=False, graded=False, qty=1, nested=True):
+        price = {"price": {"cents": cents, "currency": "EUR"}} if nested else {"price_cents": cents, "price_currency": "EUR"}
+        return {**price, "quantity": qty, "graded": graded,
+                "properties_hash": {"condition": cond, "pokemon_language": lang, "pokemon_reverse": reverse}}
+
+    def test_summarize_lowest_and_count_per_key(self):
+        summary = ct.summarize([
+            self.offer(300), self.offer(250, qty=2, nested=False), self.offer(900, graded=True),
+            self.offer(120, lang="en"), self.offer(400, reverse=True), self.offer(100, cond="Wrong"),
+            {**self.offer(50), "price": {"cents": 50, "currency": "USD"}},
+        ])
+        self.assertEqual(summary[("it", "Near Mint", 0, 0)], [250, 3])
+        self.assertEqual(summary[("en", "Near Mint", 0, 0)], [120, 1])
+        self.assertEqual(summary[("it", "Near Mint", 1, 0)], [400, 1])
+        self.assertEqual(len(summary), 3)
+
+    def test_phone_keys_by_cardmarket_id(self):
+        collected = {"day": "2026-11-19", "blueprints": {"77": {"cm": [100, 101], "offers": [["it", "Near Mint", 0, 0, 250, 3]]}}}
+        data = ct.phone(collected, {100})
+        self.assertEqual(data["p"], {"100": {"b": 77, "o": [["it", 1, 0, 0, 250, 3]]}})

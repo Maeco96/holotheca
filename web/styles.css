@@ -236,9 +236,13 @@ pre.debug { font: 12px/1.4 ui-monospace, Menlo, monospace; white-space: pre-wrap
 .cardgrid .tile .qty { background: var(--good); }
 .cardgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; }
 
-/* an expansion without a logo shows its first card instead */
-.logo.cover img { max-height: 100%; width: auto; border-radius: 4px; }
-.sethead .logo.cover { height: 150px; }
+/* an expansion without a logo shows its symbol, else its code set in type */
+.logo.symbol img { max-height: 54px; }
+.logo.typeset .code {
+  font-size: 26px; padding: 8px 14px; border: 1px solid var(--brass-dim); border-radius: 10px;
+  box-shadow: inset 0 0 0 3px rgba(214, 170, 90, .08); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sethead .logo.typeset .code { font-size: 34px; }
 
 /* ---------- Prices ---------- */
 .btn.small { padding: 7px 10px; font-size: 13px; border-radius: 10px; }

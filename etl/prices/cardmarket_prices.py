@@ -32,6 +32,7 @@ GAME = 6  # Pokémon on Cardmarket
 BASE = "https://downloads.s3.cardmarket.com/productCatalog"
 GUIDE_URL = f"{BASE}/priceGuide/price_guide_{GAME}.json"
 SEALED_URL = f"{BASE}/productList/products_nonsingles_{GAME}.json"
+SINGLES_URL = f"{BASE}/productList/products_singles_{GAME}.json"
 UA = "Holotheca-prices/0.1 (+https://github.com/Maeco96/holotheca)"
 
 # Positions in each row of prices.json "p". Keep in step with web/prices.js.
@@ -193,7 +194,21 @@ def bucket_of(product: int) -> int:
     return product % BUCKETS
 
 
-def write_phone(guide: dict, sealed: dict | None, index: dict, months: list[dict], out: Path) -> dict:
+def expansions_of(singles: dict | None, wanted: set[int]) -> dict[str, int]:
+    """Cardmarket expansion id of each wanted single, so the app can link a search narrowed to it."""
+    out = {}
+    for p in (singles or {}).get("products", []):
+        try:
+            product, expansion = int(p["idProduct"]), int(p.get("idExpansion") or 0)
+        except (KeyError, TypeError, ValueError):
+            continue
+        if expansion and product in wanted:
+            out[str(product)] = expansion
+    return out
+
+
+def write_phone(guide: dict, sealed: dict | None, index: dict, months: list[dict], out: Path,
+                singles: dict | None = None) -> dict:
     day = guide_day(guide)
     prices = compact_guide(guide)
     sealed_list = sealed_rows(sealed) if sealed else []
@@ -208,6 +223,7 @@ def write_phone(guide: dict, sealed: dict | None, index: dict, months: list[dict
         "buckets": BUCKETS,
         "p": {str(k): v for k, v in prices.items() if k in wanted},
         "sealed": [r for r in sealed_list if r[0] in prices] + [r for r in sealed_list if r[0] not in prices],
+        "x": expansions_of(singles, catalogue_ids(index)),
     }
     out.mkdir(parents=True, exist_ok=True)
     (out / "prices.json").write_text(json.dumps(phone, separators=(",", ":"), ensure_ascii=False))
@@ -247,6 +263,7 @@ def main(argv=None) -> int:
     p_phone = sub.add_parser("phone", help="write data/prices.json and data/prices-h/ for the app")
     p_phone.add_argument("--guide", type=Path, required=True)
     p_phone.add_argument("--sealed", type=Path)
+    p_phone.add_argument("--singles", type=Path, help="products_singles_6.json (expansion of each card)")
     p_phone.add_argument("--index", type=Path, required=True, help="web/data/scan-index.json")
     p_phone.add_argument("--history-dir", type=Path, help="folder with history-YYYY-MM.json.gz files")
     p_phone.add_argument("--out", type=Path, required=True, help="web/data")
@@ -256,6 +273,7 @@ def main(argv=None) -> int:
         args.out.mkdir(parents=True, exist_ok=True)
         download(GUIDE_URL, args.out / f"price_guide_{GAME}.json")
         download(SEALED_URL, args.out / f"products_nonsingles_{GAME}.json")
+        download(SINGLES_URL, args.out / f"products_singles_{GAME}.json")
         guide = load_json(args.out / f"price_guide_{GAME}.json")
         print(f"price guide of {guide.get('createdAt')}: {len(guide.get('priceGuides', []))} products")
         return 0
@@ -272,13 +290,14 @@ def main(argv=None) -> int:
 
     guide = load_json(args.guide)
     sealed = load_json(args.sealed) if args.sealed and args.sealed.exists() else None
+    singles = load_json(args.singles) if args.singles and args.singles.exists() else None
     index = load_json(args.index)
     months = []
     if args.history_dir and args.history_dir.exists():
         months = [load_json(p) for p in sorted(args.history_dir.glob("history-*.json.gz"))]
     if not any(guide_day(guide) in m.get("dates", []) for m in months):
         months.append(add_day(blank_history(), guide_day(guide), guide))  # today, even before the first history run
-    stats = write_phone(guide, sealed, index, months, args.out)
+    stats = write_phone(guide, sealed, index, months, args.out, singles)
     print(json.dumps(stats))
     return 0
 

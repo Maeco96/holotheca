@@ -49,10 +49,17 @@ jobs:
           gh release download prices-history -p 'history-*.json.gz' -D "$RUNNER_TEMP/prices-history" || echo "no price history yet"
           if python3 etl/prices/cardmarket_prices.py fetch --out "$RUNNER_TEMP/prices"; then
             python3 etl/prices/cardmarket_prices.py phone --guide "$RUNNER_TEMP/prices/price_guide_6.json" \
-              --sealed "$RUNNER_TEMP/prices/products_nonsingles_6.json" --index web/data/scan-index.json \
+              --sealed "$RUNNER_TEMP/prices/products_nonsingles_6.json" --singles "$RUNNER_TEMP/prices/products_singles_6.json" \
+              --index web/data/scan-index.json \
               --history-dir "$RUNNER_TEMP/prices-history" --out web/data
           else
             echo "::warning::Cardmarket price guide not reachable: this deployment has no prices"
+          fi
+          # CardTrader offers by language and condition (collected by prices.yml when the token is set).
+          gh release download prices-history -p 'cardtrader-latest.json.gz' -D "$RUNNER_TEMP/ct" || echo "no CardTrader offers yet"
+          if [ -f "$RUNNER_TEMP/ct/cardtrader-latest.json.gz" ]; then
+            python3 etl/prices/cardtrader_prices.py phone --collected "$RUNNER_TEMP/ct/cardtrader-latest.json.gz" \
+              --index web/data/scan-index.json --out web/data/cardtrader.json
           fi
       # Addresses of the images on the official card sites (Japan, Korea, Taiwan), from the
       # facts collected by official-sources.yml. Only addresses: the phone loads the images there.

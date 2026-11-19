@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.15.0";
+const VERSION = "0.17.0";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -713,34 +713,43 @@ function ownedBySet() {
 }
 
 /** The logo of an expansion, falling back to its code when no logo can be loaded. */
+/** "30th Celebration" -> "30C", "Expansion Pack" -> "EP": a stand-in code for sets without one. */
+function initials(name) {
+  const words = String(name || "?").split(/[\s\-:「」]+/).filter(Boolean);
+  if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
+  return words.slice(0, 3).map((w) => (/^\d+/.test(w) ? w.match(/^\d+/)[0] : w[0])).join("").toUpperCase();
+}
+
 function setLogo(set, lang) {
   const box = el("div", { class: "logo" });
   const fallback = el("span", { class: "code", text: set.code });
   box.appendChild(fallback);
-  // The logo first; when the source has none, the picture of the first cards of the expansion.
-  let urls = Catalogue.setLogos(set, lang || null);
-  let cover = false;
+  // The logo first, then the expansion symbol; when the source has neither, the set code and
+  // name in type. Card pictures are not used: they looked like a card of the set, and the first
+  // cards of a set are often the ones without an image.
+  const symbol = Catalogue.setSymbol(set);
+  const urls = [...Catalogue.setLogos(set, lang || null), ...(symbol ? [symbol] : [])];
   let attempt = 0;
   const img = el("img", { alt: set.name, loading: "lazy", decoding: "async", class: "loading" });
-  const useCover = () => {
-    if (cover) return false;
-    cover = true;
-    urls = Catalogue.coverImages(set, lang || null);
-    attempt = 0;
-    if (!urls.length) return false;
-    box.classList.add("cover");
-    img.src = urls[0];
-    return true;
+  const textTile = () => {
+    img.remove();
+    box.classList.add("typeset");
+    // Official code first (DLR), else the source id when it is short (M6a), else initials.
+    fallback.textContent = set.code || (set.source && set.source.length <= 6 ? set.source : initials(set.name));
   };
-  img.addEventListener("load", () => { img.classList.remove("loading"); fallback.remove(); });
+  img.addEventListener("load", () => {
+    img.classList.remove("loading");
+    if (img.src === symbol) box.classList.add("symbol");
+    fallback.remove();
+  });
   img.addEventListener("error", () => {
     attempt += 1;
     if (attempt < urls.length) img.src = urls[attempt];
-    else useCover();
+    else textTile();
   });
   box.appendChild(img);
   if (urls.length) img.src = urls[0];
-  else if (!useCover()) img.remove();
+  else textTile();
   return box;
 }
 
@@ -906,7 +915,7 @@ function ownedPanel(card) {
     ].filter(Boolean).join(" · ");
     const unit = Prices.copyUnit(copy, card);
     const money = [
-      unit ? `vale ${euro(unit.value)}${unit.source === "manual" ? " (tuo)" : unit.approx ? " (prezzo normale)" : ""}` : "senza prezzo",
+      unit ? `vale ${euro(unit.value)} ${unitSource(unit)}` : "senza prezzo",
       copy.purchase_price != null ? `pagata ${euro(copy.purchase_price)}${copy.purchase_date ? ` il ${shortDate(copy.purchase_date)}` : ""}` : null,
     ].filter(Boolean).join(" · ");
     const gain = unit && copy.purchase_price != null ? unit.value - copy.purchase_price : null;
@@ -1012,6 +1021,41 @@ function addPanel(card, onLang) {
  * The price panel of a card page: Cardmarket figures from the daily guide, a chart of the trend
  * over time, and TCGplayer (dollars) from TCGdex when the phone is online.
  */
+/** Where a copy's value comes from, in a few words. */
+function unitSource(unit) {
+  if (unit.source === "manual") return "(tuo)";
+  if (unit.source === "cardtrader") {
+    const o = unit.offer;
+    const lang = (LANG_LABELS[o.lang] || o.lang).toLowerCase();
+    return `(CardTrader, ${lang} ${Prices.CT_SHORT[o.condition]}${o.exact ? "" : ", condizione vicina"}, ${o.count} in vendita)`;
+  }
+  return unit.approx ? "(Cardmarket, prezzo normale)" : "(trend Cardmarket)";
+}
+
+/**
+ * CardTrader offers of a card by language and condition: the cheapest offer for each, the
+ * languages of the owned copies and Italian/English first. Shown only when the nightly collection
+ * has the card (it needs the owner's CardTrader token).
+ */
+function cardtraderRows(card) {
+  const data = Prices.cardtrader(card);
+  if (!data || !data.offers.length) return null;
+  const ownedLangs = Store.copiesOf(card.key).map((c) => c.lang);
+  const order = [...new Set([...ownedLangs, "it", "en", "ja", "fr", "de", "es", "pt"])];
+  const rank = (lang) => (order.includes(lang) ? order.indexOf(lang) : order.length);
+  const offers = [...data.offers].sort((a, b) => rank(a.lang) - rank(b.lang) || a.lang.localeCompare(b.lang) ||
+    a.reverse - b.reverse || a.first - b.first || a.condition - b.condition);
+  const rows = offers.slice(0, 14).map((o) => el("div", { class: "pricerow" },
+    el("span", { class: "grow", text: [LANG_LABELS[o.lang] || o.lang, Prices.CT_SHORT[o.condition], o.reverse ? "reverse" : null, o.first ? "1ª ed." : null].filter(Boolean).join(" · ") }),
+    el("span", { class: "muted small", text: `${o.count} in vendita` }),
+    el("b", { text: euro(o.price) })));
+  return [
+    el("div", { class: "muted small", style: "margin-top:10px", text: `CardTrader, offerta più bassa per lingua e condizione, ${shortDate(data.day)}` }),
+    ...rows,
+    offers.length > rows.length ? el("div", { class: "muted small", text: `e altre ${offers.length - rows.length} combinazioni` }) : null,
+  ];
+}
+
 function pricePanel(card) {
   const panel = el("div", { class: "panel prices" });
   const p = Prices.forCard(card);
@@ -1053,6 +1097,8 @@ function pricePanel(card) {
       }
     });
   }
+  const ctRows = cardtraderRows(card);
+  if (ctRows) panel.append(...ctRows.filter(Boolean));
   const liveBox = el("div");
   panel.appendChild(liveBox);
   Prices.fromTcgdex(card).then((pricing) => {
@@ -1105,7 +1151,8 @@ async function renderCard(key) {
   const linkBox = el("div", { class: "links" });
   const showLinks = (lang) => {
     linkBox.innerHTML = "";
-    for (const link of Catalogue.links(card, lang)) {
+    const extra = { cardmarketExpansion: Prices.cardmarketExpansion(card), blueprint: Prices.blueprintOf(card) };
+    for (const link of Catalogue.links(card, lang, extra)) {
       linkBox.appendChild(el("a", { class: "btn", href: link.url, target: "_blank", rel: "noopener", text: link.exact ? link.label : `${link.label} (ricerca)` }));
     }
   };
@@ -1154,7 +1201,9 @@ function renderMore() {
   if (info) $("catalogueInfo").textContent = `${info.cards.toLocaleString("it-IT")} carte, ${info.sets} espansioni`;
   Prices.load().then(() => {
     const p = Prices.info();
-    $("pricesInfo").textContent = p ? `Cardmarket del ${shortDate(p.day)}, ${p.products.toLocaleString("it-IT")} prodotti` : "non disponibili";
+    $("pricesInfo").textContent = p
+      ? `Cardmarket del ${shortDate(p.day)}` + (p.cardtrader ? `, CardTrader del ${shortDate(p.cardtrader.day)}` : ", CardTrader non attivo")
+      : "non disponibili";
   });
   $("cameraInfo").textContent = Camera.describe();
   $("logToggle").checked = ScanLog.enabled();

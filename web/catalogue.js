@@ -152,16 +152,21 @@ const Catalogue = (() => {
   const CARDMARKET_LANGUAGE = { en: 1, fr: 2, de: 3, es: 4, it: 5, "zh-cn": 6, ja: 7, pt: 8, ru: 9, ko: 10, "zh-tw": 11 };
 
   /** Marketplace pages. Product pages when the catalogue knows the id, else a name search. */
-  function links(c, lang = null) {
+  /**
+   * Shop links. `extra.cardmarketExpansion` narrows the Cardmarket search to the card's expansion
+   * (the old "?idProduct=" link is refused by Cardmarket's protection and showed a login page);
+   * `extra.blueprint` is the CardTrader page of the card, else CardTrader opens a search.
+   */
+  function links(c, lang = null, extra = {}) {
     const query = encodeURIComponent(`${c.name} ${c.number}`);
     const language = CARDMARKET_LANGUAGE[lang] ? `&language=${CARDMARKET_LANGUAGE[lang]}` : "";
+    const expansion = extra.cardmarketExpansion ? `&idExpansion=${extra.cardmarketExpansion}` : "";
     return [
       {
         label: "Cardmarket",
-        url: c.cardmarketId
-          ? `https://www.cardmarket.com/it/Pokemon/Products?idProduct=${c.cardmarketId}${language}`
-          : `https://www.cardmarket.com/it/Pokemon/Products/Search?searchString=${encodeURIComponent(c.name)}${language}`,
-        exact: Boolean(c.cardmarketId),
+        url: `https://www.cardmarket.com/it/Pokemon/Products/Search?searchMode=v2&idCategory=0${expansion}` +
+          `&searchString=${encodeURIComponent(c.name)}${language}`,
+        exact: Boolean(expansion),
       },
       {
         label: "TCGplayer",
@@ -170,10 +175,10 @@ const Catalogue = (() => {
           : `https://www.tcgplayer.com/search/pokemon/product?q=${query}`,
         exact: Boolean(c.tcgplayerId),
       },
-      c.cardtraderId
-        ? { label: "CardTrader", url: `https://www.cardtrader.com/cards/${c.cardtraderId}`, exact: true }
-        : null,
-    ].filter(Boolean);
+      extra.blueprint || c.cardtraderId
+        ? { label: "CardTrader", url: `https://www.cardtrader.com/cards/${extra.blueprint || c.cardtraderId}`, exact: true }
+        : { label: "CardTrader", url: `https://www.cardtrader.com/it/search?q=${query}`, exact: false },
+    ];
   }
 
   /** Every expansion, newest first, as { id, name, code, releaseDate, langs, cards }. */
@@ -215,19 +220,15 @@ const Catalogue = (() => {
       .replace("/{number}", "/logo.webp"));
   }
 
-  /** Pictures of the first cards of an expansion, to stand in for a missing logo. */
-  function coverImages(set, preferred = null, count = 3) {
-    if (!index) return [];
-    const raw = index.raw;
-    const setIndex = raw.sets.findIndex((row) => row[0] === set.id);
-    const out = [];
-    let taken = 0;
-    for (let i = 0; i < raw.cards.length && taken < count; i++) {
-      if (raw.cards[i][0] !== setIndex) continue;
-      taken++;
-      out.push(...images(card(i), "low", preferred).map((image) => image.url));
-    }
-    return out;
+  /** The expansion symbol (TCGdex keeps one per set, language independent), for a missing logo. */
+  function setSymbol(set) {
+    const pattern = index && index.raw.image_url_pattern;
+    if (!pattern || !set.series || set.series === "official") return null;
+    return pattern
+      .replace("{lang}", "univ")
+      .replace("{serie}", encodeURIComponent(set.series))
+      .replace("{set}", encodeURIComponent(set.source))
+      .replace("/{number}", "/symbol.webp");
   }
 
   /**
@@ -277,5 +278,5 @@ const Catalogue = (() => {
     return found.slice(0, limit).map(card);
   }
 
-  return { load, info, card, cardByKey, nameIn, images, parseVariant, links, search, sets, cardsOfSet, setLogos, coverImages, prepared: () => index };
+  return { load, info, card, cardByKey, nameIn, images, parseVariant, links, search, sets, cardsOfSet, setLogos, setSymbol, prepared: () => index };
 })();
