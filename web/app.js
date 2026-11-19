@@ -1,6 +1,6 @@
 // Holotheca app shell: views, navigation and the scan flow.
 // Reading runs on the device; the collection stays in the browser's storage (see store.js).
-const VERSION = "0.14.0";
+const VERSION = "0.16.0";
 const $ = (id) => document.getElementById(id);
 
 const VARIANT_LABELS = { normal: "Normale", holo: "Holo", reverse: "Reverse holo", metal: "Metallo", lenticular: "Lenticolare" };
@@ -77,6 +77,75 @@ function absolute(path) {
 function euro(value) {
   return value.toLocaleString("it-IT", { style: "currency", currency: "EUR" });
 }
+
+function shortDate(iso) {
+  if (!iso) return "";
+  const date = new Date(`${iso}T12:00:00`);
+  return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString("it-IT", { day: "numeric", month: "short", year: "2-digit" });
+}
+
+/** A signed euro difference, "+1,20 €" or "−0,80 €". */
+function signedEuro(value) {
+  return (value >= 0 ? "+" : "−") + euro(Math.abs(value));
+}
+
+function today() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+/** Reads a euro amount typed by the owner ("12,50" or "12.50"); empty gives null, nonsense undefined. */
+function parseEuro(text) {
+  const clean = String(text || "").trim().replace(/[€\s]/g, "").replace(",", ".");
+  if (!clean) return null;
+  const value = Number(clean);
+  return Number.isFinite(value) && value >= 0 ? Math.round(value * 100) / 100 : undefined;
+}
+
+/**
+ * A small line chart as inline SVG. `series` is [{ points: [[x, y], ...], cls }], x in ms.
+ * Shows the lowest and highest value and the first and last date; nothing else.
+ */
+function lineChart(series, { height = 120, money = true } = {}) {
+  const all = series.flatMap((s) => s.points);
+  if (all.length < 2) return null;
+  const width = 320;
+  const pad = { l: 4, r: 4, t: 16, b: 20 };
+  const xs = all.map((p) => p[0]);
+  const ys = all.map((p) => p[1]);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs);
+  let y0 = Math.min(...ys), y1 = Math.max(...ys);
+  if (y0 === y1) { y0 *= 0.9; y1 = y1 * 1.1 || 1; }
+  const sx = (x) => pad.l + ((x - x0) / (x1 - x0 || 1)) * (width - pad.l - pad.r);
+  const sy = (y) => pad.t + (1 - (y - y0) / (y1 - y0)) * (height - pad.t - pad.b);
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("class", "chart");
+  svg.setAttribute("role", "img");
+  const add = (tag, attrs, text) => {
+    const node = document.createElementNS(ns, tag);
+    for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+    if (text) node.textContent = text;
+    svg.appendChild(node);
+    return node;
+  };
+  for (const y of [y0, y1]) add("line", { x1: pad.l, x2: width - pad.r, y1: sy(y), y2: sy(y), class: "grid" });
+  for (const s of series) {
+    if (s.points.length < 2) continue;
+    add("polyline", { points: s.points.map(([x, y]) => `${sx(x).toFixed(1)},${sy(y).toFixed(1)}`).join(" "), class: `line ${s.cls || ""}` });
+  }
+  const label = (v) => (money ? euro(v) : String(v));
+  // Value labels sit just above their line on the left; dates sit below the chart.
+  add("text", { x: pad.l, y: sy(y1) - 4, class: "lbl" }, label(y1));
+  add("text", { x: pad.l, y: sy(y0) - 4, class: "lbl" }, label(y0));
+  const day = (ms) => new Date(ms).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+  add("text", { x: pad.l, y: height - 3, class: "lbl" }, day(x0));
+  add("text", { x: width - pad.r, y: height - 3, "text-anchor": "end", class: "lbl" }, day(x1));
+  return svg;
+}
+
+const BASIS_LABELS = { trend: "trend", avg30: "media 30 giorni", avg7: "media 7 giorni" };
 
 function formatDate(iso) {
   if (!iso) return null;
@@ -177,12 +246,70 @@ $("back").addEventListener("click", () => (history.length > 1 ? history.back() :
 
 let selectedBinder = null;
 
+/**
+ * Value of the collection (or of one binder) at today's prices: { value, priced, unpriced, cost,
+ * costed } where `cost` is what was paid for the copies that have both a price paid and a value,
+ * so a gain compares like with like.
+ */
+function collectionValue(binderId) {
+  let value = 0, priced = 0, unpriced = 0, cost = 0, costed = 0;
+  const count = (unit, quantity, paid) => {
+    if (!unit) { unpriced += quantity; return; }
+    value += unit.value * quantity;
+    priced += quantity;
+    if (paid != null) { cost += paid * quantity; costed += unit.value * quantity; }
+  };
+  for (const copy of Store.copies(binderId)) {
+    count(Prices.copyUnit(copy, Catalogue.cardByKey(copy.card_source_id)), copy.quantity, copy.purchase_price);
+  }
+  for (const item of Store.sealed(binderId)) count(Prices.sealedUnit(item), item.quantity, item.purchase_price);
+  return { value: Math.round(value * 100) / 100, priced, unpriced, cost, costed };
+}
+
+function renderValuePanel(stats) {
+  const panel = $("valuePanel");
+  panel.innerHTML = "";
+  const info = Prices.info();
+  if (!info) {
+    panel.appendChild(el("p", { class: "muted small", style: "margin:0", text: "Prezzi non disponibili: servono la rete e un aggiornamento dell'app." }));
+    return;
+  }
+  const lines = [];
+  if (stats.costed) {
+    const gain = stats.costed - stats.cost;
+    lines.push(el("div", { class: "row" },
+      el("span", { class: "grow muted small", text: "Carte con prezzo pagato: valgono" }),
+      el("b", { class: gain >= 0 ? "up" : "down", text: `${euro(stats.costed)} (${signedEuro(gain)})` })));
+  }
+  if (stats.unpriced) lines.push(el("div", { class: "muted small", text: `${stats.unpriced} senza prezzo: gradate senza valore indicato o carte che Cardmarket non quota.` }));
+  const history = Store.valueHistory().filter((r) => r.value != null);
+  const chart = selectedBinder === null && history.length >= 2
+    ? lineChart([
+      { points: history.map((r) => [Date.parse(r.day), r.value]), cls: "main" },
+      { points: history.filter((r) => r.spent).map((r) => [Date.parse(r.day), r.spent]), cls: "alt" },
+    ])
+    : null;
+  panel.append(
+    ...lines,
+    chart,
+    chart ? el("div", { class: "legend small muted" }, el("span", { class: "key main" }), "valore ", el("span", { class: "key alt" }), "spesi") : null,
+    el("p", { class: "muted small", style: "margin:6px 0 0", text:
+      `Trend Cardmarket del ${shortDate(info.day)}, per copie non gradate in qualunque condizione.` +
+      (selectedBinder === null && history.length < 2 ? " L'andamento compare dal secondo giorno di prezzi." : "") }));
+}
+
 async function renderCollection() {
-  await Catalogue.load();
+  await Promise.all([Catalogue.load(), Prices.load()]);
   const stats = Store.stats(selectedBinder);
+  const worth = collectionValue(selectedBinder);
   $("statTotal").textContent = stats.total;
   $("statDistinct").textContent = stats.distinct;
   $("statSpent").textContent = stats.spent ? euro(stats.spent) : "–";
+  $("statValue").textContent = Prices.info() && worth.priced ? euro(worth.value) : "–";
+  if (Prices.info() && selectedBinder === null && (worth.priced || stats.spent)) {
+    Store.recordValue({ day: Prices.info().day, value: worth.value, spent: stats.spent, priced: worth.priced, unpriced: worth.unpriced });
+  }
+  renderValuePanel(worth);
 
   const chips = $("binderChips");
   chips.innerHTML = "";
@@ -207,8 +334,109 @@ async function renderCollection() {
         el("div", { class: "cap", text: card ? card.name : key }))
     );
   }
-  $("collectionEmpty").hidden = keys.length > 0;
+  renderSealedList();
+  $("collectionEmpty").hidden = keys.length > 0 || Store.sealed(selectedBinder).length > 0;
 }
+
+// Sealed products: picked from Cardmarket's product list, kept in Store.sealed().
+function renderSealedList() {
+  const list = $("sealedList");
+  list.innerHTML = "";
+  const items = Store.sealed(selectedBinder);
+  $("sealedHead").hidden = !items.length;
+  for (const item of items) {
+    const unit = Prices.sealedUnit(item);
+    const details = [
+      item.product_type,
+      unit ? `${euro(unit.value)}${unit.source === "manual" ? " (tuo)" : ""}` : "senza prezzo",
+      item.purchase_price != null ? `pagato ${euro(item.purchase_price)}` : null,
+    ].filter(Boolean).join(" · ");
+    list.appendChild(el("div", { class: "copy" },
+      el("div", { class: "grow" }, el("div", { text: item.name }), el("div", { class: "muted small", text: details })),
+      el("button", { class: "btn ghost small", text: "Valore", onclick: () => askValue(item.manual_value, (v) => { Store.setSealedValue(item.id, v); renderCollection(); }) }),
+      el("div", { class: "stepper" },
+        el("button", { text: "−", "aria-label": "Togli uno", onclick: () => { Store.changeSealedQuantity(item.id, -1); renderCollection(); } }),
+        el("b", { text: String(item.quantity) }),
+        el("button", { text: "+", "aria-label": "Aggiungi uno", onclick: () => { Store.changeSealedQuantity(item.id, 1); renderCollection(); } }))));
+  }
+}
+
+/** Asks for a value in euro; empty clears it (back to the price guide). */
+function askValue(current, done) {
+  const answer = prompt("Valore in euro (vuoto = usa il prezzo Cardmarket)", current != null ? String(current).replace(".", ",") : "");
+  if (answer === null) return;
+  const value = parseEuro(answer);
+  if (value === undefined) { alert("Scrivi un importo, per esempio 12,50."); return; }
+  done(value);
+}
+
+let sealedChoice = null;
+
+function renderSealedPicker() {
+  const box = $("sealedResults");
+  box.innerHTML = "";
+  if (!Prices.info()) {
+    box.appendChild(el("p", { class: "muted small", text: "L'elenco dei sigillati arriva con i prezzi: serve la rete." }));
+    return;
+  }
+  if (sealedChoice) {
+    const item = sealedChoice;
+    const p = Prices.forProduct(item.id);
+    const head = p && Prices.headline(p.normal);
+    const price = el("input", { type: "text", inputmode: "decimal", placeholder: "facoltativo" });
+    const date = el("input", { type: "date", value: today() });
+    const binder = select([["", "Nessuno"], ...Store.binders().map((b) => [String(b.id), b.name])], selectedBinder ? String(selectedBinder) : "");
+    const lang = select([["", "Non indicata"], ...MAIN_LANGS.map((l) => [l, LANG_LABELS[l] || l])], "");
+    const add = () => {
+      const paid = parseEuro(price.value);
+      if (paid === undefined) { alert("Prezzo pagato: scrivi un importo, per esempio 12,50."); return; }
+      Store.addSealed({
+        cardmarket_id: item.id, name: item.name, product_type: item.category.replace(/^Pokémon\s*/, ""),
+        lang: lang.value || null, binder_id: binder.value ? Number(binder.value) : null,
+        purchase_price: paid, purchase_date: paid == null ? null : date.value || null,
+      });
+      sealedChoice = null;
+      $("sealedSearch").value = "";
+      $("sealedPicker").hidden = true;
+      renderCollection();
+    };
+    box.append(el("div", { class: "panel" },
+      el("b", { text: item.name }),
+      el("div", { class: "muted small", text: [item.category, head ? `trend ${euro(head.value)}` : "senza prezzo"].join(" · ") }),
+      el("div", { class: "fields" },
+        el("label", { class: "field" }, "Lingua", lang),
+        el("label", { class: "field" }, "Raccoglitore", binder),
+        el("label", { class: "field" }, "Prezzo pagato (€)", price),
+        el("label", { class: "field" }, "Data d'acquisto", date)),
+      el("div", { class: "row" },
+        el("button", { class: "btn ghost", text: "Indietro", onclick: () => { sealedChoice = null; renderSealedPicker(); } }),
+        el("button", { class: "btn primary grow", text: "Aggiungi allo scrigno", onclick: add }))));
+    return;
+  }
+  const text = $("sealedSearch").value.trim();
+  if (text.length < 2) {
+    box.appendChild(el("p", { class: "muted small", text: "Scrivi il nome in inglese come su Cardmarket, per esempio: evolving skies booster box." }));
+    return;
+  }
+  const found = Prices.searchSealed(text);
+  if (!found.length) box.appendChild(el("p", { class: "muted small", text: "Nessun prodotto trovato." }));
+  for (const item of found) {
+    const p = Prices.forProduct(item.id);
+    const head = p && Prices.headline(p.normal);
+    box.appendChild(el("button", { class: "item", onclick: () => { sealedChoice = item; renderSealedPicker(); } },
+      el("div", { class: "grow" }, el("div", { text: item.name }), el("div", { class: "muted small", text: item.category })),
+      el("b", { text: head ? euro(head.value) : "–" })));
+  }
+}
+
+$("sealedOpen").addEventListener("click", async () => {
+  $("sealedPicker").hidden = !$("sealedPicker").hidden;
+  sealedChoice = null;
+  await Prices.load();
+  renderSealedPicker();
+  if (!$("sealedPicker").hidden) $("sealedSearch").focus();
+});
+$("sealedSearch").addEventListener("input", () => { sealedChoice = null; renderSealedPicker(); });
 
 // ---------- Scan ----------
 
@@ -841,13 +1069,23 @@ function ownedPanel(card) {
     const details = [
       variantLabel(copyVariant(copy)),
       LANG_LABELS[copy.lang] || copy.lang,
-      copy.condition,
+      copy.grade_company ? `${copy.grade_company} ${copy.grade || ""}`.trim() : copy.condition,
       binderName(copy.binder_id),
-      copy.purchase_price != null ? euro(copy.purchase_price) : null,
     ].filter(Boolean).join(" · ");
+    const unit = Prices.copyUnit(copy, card);
+    const money = [
+      unit ? `vale ${euro(unit.value)}${unit.source === "manual" ? " (tuo)" : unit.approx ? " (prezzo normale)" : ""}` : "senza prezzo",
+      copy.purchase_price != null ? `pagata ${euro(copy.purchase_price)}${copy.purchase_date ? ` il ${shortDate(copy.purchase_date)}` : ""}` : null,
+    ].filter(Boolean).join(" · ");
+    const gain = unit && copy.purchase_price != null ? unit.value - copy.purchase_price : null;
     panel.appendChild(
       el("div", { class: "copy" },
-        el("div", { class: "grow" }, el("div", { text: details }), copy.notes ? el("div", { class: "s muted small", text: copy.notes }) : null),
+        el("div", { class: "grow" },
+          el("div", { text: details }),
+          el("div", { class: "small" }, el("span", { class: "muted", text: money }),
+            gain !== null ? el("span", { class: gain >= 0 ? "up" : "down", text: ` ${signedEuro(gain)}` }) : null),
+          copy.notes ? el("div", { class: "s muted small", text: copy.notes }) : null),
+        el("button", { class: "btn ghost small", text: "Valore", onclick: () => askValue(copy.manual_value, (v) => { Store.setCopyValue(copy.id, v); renderCard(card.key); }) }),
         el("div", { class: "stepper" },
           el("button", { text: "−", "aria-label": "Togli una copia", onclick: () => { Store.changeQuantity(copy.id, -1); renderCard(card.key); } }),
           el("b", { text: String(copy.quantity) }),
@@ -876,7 +1114,20 @@ function addPanel(card, onLang) {
   if (onLang) onLang(lang.value);
   const condition = select([["", "Non indicata"], ...CONDITIONS.map((c) => [c, c])], "NM");
   const binder = select([["", "Nessuno"], ...Store.binders().map((b) => [String(b.id), b.name])], selectedBinder ? String(selectedBinder) : "");
-  const price = el("input", { type: "number", inputmode: "decimal", min: "0", step: "0.01", placeholder: "facoltativo" });
+  const price = el("input", { type: "text", inputmode: "decimal", placeholder: "facoltativo" });
+  const date = el("input", { type: "date", value: today() });
+  // Graded copies: company and grade from the slab, and a value typed by the owner, because
+  // there is no free source of graded prices.
+  const gradeCompany = select([["", "No"], ...["PSA", "BGS", "CGC", "TAG", "ACE", "SGC", "GRAAD", "Altro"].map((c) => [c, c])], "");
+  const grade = el("input", { type: "text", inputmode: "decimal", maxlength: "12", placeholder: "es. 9" });
+  const manual = el("input", { type: "text", inputmode: "decimal", placeholder: "facoltativo" });
+  const gradeFields = el("div", { class: "fields", hidden: true },
+    el("label", { class: "field" }, "Voto", grade),
+    el("label", { class: "field" }, "Valore (€)", manual));
+  gradeCompany.addEventListener("change", () => {
+    gradeFields.hidden = !gradeCompany.value;
+    condition.disabled = Boolean(gradeCompany.value);
+  });
   const notes = el("input", { type: "text", maxlength: "200", placeholder: "facoltative" });
   const variantHint = (card.variants.length
     ? card.variantsInferred ? "Variante dedotta dalla rarità: controlla la carta." : "Variante e versione non le decide lo scanner: controllale sulla carta (timbro 1ª edizione, holo, reverse)."
@@ -885,7 +1136,9 @@ function addPanel(card, onLang) {
 
   const chosen = () => Catalogue.parseVariant(variant.value);
   const add = () => {
-    const paid = price.value === "" ? null : Number(price.value);
+    const paid = parseEuro(price.value);
+    const value = parseEuro(manual.value);
+    if (paid === undefined || value === undefined) { alert("Scrivi gli importi come 12,50."); return; }
     Store.addCopy({
       card_source_id: card.key,
       lang: lang.value,
@@ -895,11 +1148,14 @@ function addPanel(card, onLang) {
       variant_foil: chosen().foil,
       variant_size: chosen().size,
       variant_confirmed: true, // the owner chose it on this form
-      condition: condition.value || null,
+      condition: gradeCompany.value ? null : condition.value || null,
       binder_id: binder.value ? Number(binder.value) : null,
       quantity: 1,
-      purchase_price: Number.isFinite(paid) ? paid : null,
-      purchase_date: paid == null ? null : new Date().toISOString().slice(0, 10),
+      purchase_price: paid,
+      purchase_date: paid == null ? null : date.value || null,
+      grade_company: gradeCompany.value || null,
+      grade: gradeCompany.value ? grade.value.trim() || null : null,
+      manual_value: gradeCompany.value ? value : null,
       notes: notes.value.trim() || null,
     });
     renderCard(card.key);
@@ -912,13 +1168,86 @@ function addPanel(card, onLang) {
       el("label", { class: "field" }, "Condizione", condition),
       el("label", { class: "field" }, "Raccoglitore", binder),
       el("label", { class: "field" }, "Prezzo pagato (€)", price),
+      el("label", { class: "field" }, "Data d'acquisto", date),
+      el("label", { class: "field" }, "Gradata", gradeCompany),
       el("label", { class: "field" }, "Note", notes)),
+    gradeFields,
     el("p", { class: "muted small", text: variantHint }),
     el("button", { class: "btn primary block", text: "Aggiungi allo scrigno", onclick: add }));
 }
 
+/**
+ * The price panel of a card page: Cardmarket figures from the daily guide, a chart of the trend
+ * over time, and TCGplayer (dollars) from TCGdex when the phone is online.
+ */
+function pricePanel(card) {
+  const panel = el("div", { class: "panel prices" });
+  const p = Prices.forCard(card);
+  const row = (label, side) => {
+    if (!side) return null;
+    const head = Prices.headline(side);
+    if (!head) return null;
+    const extra = [side.avg30 ? `30 gg ${euro(side.avg30)}` : null, side.low ? `da ${euro(side.low)}` : null].filter(Boolean).join(" · ");
+    return el("div", { class: "pricerow" },
+      el("span", { class: "grow", text: label }),
+      el("span", { class: "muted small", text: extra }),
+      el("b", { text: euro(head.value) }));
+  };
+  if (p) {
+    panel.append(
+      el("div", { class: "muted small", text: `Cardmarket, trend del ${shortDate(p.day)}` }),
+      row("Normale", p.normal),
+      row("Reverse holo", p.reverse));
+  } else if (!Prices.info()) {
+    panel.appendChild(el("div", { class: "muted small", text: "Prezzi Cardmarket non disponibili: serve la rete." }));
+  } else {
+    panel.appendChild(el("div", { class: "muted small", text: card.cardmarketId
+      ? "Cardmarket non quota questa carta nella guida prezzi."
+      : "Il catalogo non conosce il codice Cardmarket di questa carta." }));
+  }
+  const chartBox = el("div");
+  panel.appendChild(chartBox);
+  if (p) {
+    Prices.history(card.cardmarketId).then((points) => {
+      const series = [
+        { points: points.filter((q) => q.normal).map((q) => [Date.parse(q.date), q.normal]), cls: "main" },
+        { points: points.filter((q) => q.reverse).map((q) => [Date.parse(q.date), q.reverse]), cls: "alt" },
+      ];
+      const chart = lineChart(series);
+      if (chart) {
+        chartBox.append(chart, el("div", { class: "legend small muted" }, el("span", { class: "key main" }), "normale ", el("span", { class: "key alt" }), "reverse"));
+      } else {
+        chartBox.appendChild(el("div", { class: "muted small", text: "L'andamento compare dal secondo giorno di prezzi." }));
+      }
+    });
+  }
+  const liveBox = el("div");
+  panel.appendChild(liveBox);
+  Prices.fromTcgdex(card).then((pricing) => {
+    const tcg = pricing && pricing.tcgplayer;
+    if (tcg) {
+      const usd = (v) => v.toLocaleString("it-IT", { style: "currency", currency: "USD" });
+      const names = { normal: "Normale", holofoil: "Holo", "reverse-holofoil": "Reverse holo", "1stEditionHolofoil": "1ª ed. holo", "1stEditionNormal": "1ª ed.", unlimitedHolofoil: "Unlimited holo" };
+      const rows = Object.entries(tcg)
+        .filter(([, v]) => v && typeof v === "object" && (v.marketPrice || v.midPrice))
+        .map(([kind, v]) => el("div", { class: "pricerow" },
+          el("span", { class: "grow", text: names[kind] || kind }),
+          el("span", { class: "muted small", text: v.lowPrice ? `da ${usd(v.lowPrice)}` : "" }),
+          el("b", { text: usd(v.marketPrice || v.midPrice) })));
+      if (rows.length) liveBox.append(el("div", { class: "muted small", style: "margin-top:10px", text: "TCGplayer (USA), market price via TCGdex" }), ...rows);
+    }
+    if (!p && pricing && pricing.cardmarket) {
+      const cm = pricing.cardmarket;
+      const side = (suffix) => ({ trend: cm["trend" + suffix] || null, avg30: cm["avg30" + suffix] || null, avg7: cm["avg7" + suffix] || null, low: cm["low" + suffix] || null });
+      liveBox.prepend(el("div", { class: "muted small", text: "Cardmarket via TCGdex (non entra nel valore dello scrigno)" }),
+        row("Normale", side("")) || el("span"), row("Reverse holo", side("-holo")) || el("span"));
+    }
+  });
+  return panel;
+}
+
 async function renderCard(key) {
-  await Catalogue.load();
+  await Promise.all([Catalogue.load(), Prices.load()]);
   const view = $("view-card");
   view.innerHTML = "";
   const card = Catalogue.cardByKey(key);
@@ -960,7 +1289,8 @@ async function renderCard(key) {
     ownedPanel(card),
     el("h2", { text: "Aggiungi una copia" }),
     addPanel(card, showLinks),
-    el("h2", { text: "Prezzi e acquisto" }),
+    el("h2", { text: "Prezzi" }),
+    pricePanel(card),
     linkBox,
     el("p", { class: "muted small", text: "Cardmarket si apre filtrato sulla lingua scelta qui sopra." }),
     el("h2", { text: "Dati della carta" }),
@@ -990,6 +1320,10 @@ function renderMore() {
   }
   const info = Catalogue.info();
   if (info) $("catalogueInfo").textContent = `${info.cards.toLocaleString("it-IT")} carte, ${info.sets} espansioni`;
+  Prices.load().then(() => {
+    const p = Prices.info();
+    $("pricesInfo").textContent = p ? `Cardmarket del ${shortDate(p.day)}, ${p.products.toLocaleString("it-IT")} prodotti` : "non disponibili";
+  });
   $("cameraInfo").textContent = Camera.describe();
   $("logToggle").checked = ScanLog.enabled();
   ScanLog.count().then((n) => { $("logInfo").textContent = n ? `${n} letture registrate.` : "Nessuna lettura registrata."; });
