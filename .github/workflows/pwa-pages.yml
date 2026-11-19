@@ -64,6 +64,12 @@ jobs:
             python3 etl/sources/compare.py "$RUNNER_TEMP/catalogue.sqlite" "${files[@]}" \
               --report "$RUNNER_TEMP/official-vs-tcgdex.md" --images web/data/official-images.json
           fi
+      # Image vectors of the catalogue for the visual fallback, built by visual-index.yml and
+      # kept as the asset of the release "visual-index". Without it the scanner reads text only.
+      - name: Fetch the visual index
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download visual-index -p 'visual-index.*' -D web/data --clobber || echo "no visual index yet"
       - name: Stamp cache name
         run: sed -i 's/holotheca-dev/holotheca-${{ github.run_number }}/' web/sw.js
       - uses: actions/configure-pages@v5

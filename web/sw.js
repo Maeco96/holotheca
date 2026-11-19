@@ -5,7 +5,7 @@
 const CACHE = "holotheca-dev";
 const VENDOR_CACHE = "holotheca-vendor-2";
 const SHELL = [
-  "./", "index.html", "styles.css", "app.js", "recognize.js", "catalogue.js", "store.js", "prices.js", "camera.js", "scanlog.js",
+  "./", "index.html", "styles.css", "app.js", "recognize.js", "catalogue.js", "store.js", "prices.js", "camera.js", "scanlog.js", "visual.js",
   "manifest.webmanifest",
   "icon-192.png", "icon-512.png", "apple-touch-icon.png",
 ];
