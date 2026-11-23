@@ -109409,6 +109409,26 @@
 "set": "MEE",
 "name": "기본 번개 에너지"
 },
+"BS2026008007": {
+"kind": 1,
+"url": "https://pokemoncard.co.kr/cards/detail/BS2026008007",
+"image": "https://pokemoncard.co.kr/public-assets/home/data/cards.image_www/data/wmimages/MEGA/MEZ/MEZ_007.webp",
+"set": "MEZ",
+"number": "007",
+"total": "019",
+"name": "조로아크 ex",
+"hp": 270
+},
+"BS2026008008": {
+"kind": 1,
+"url": "https://pokemoncard.co.kr/cards/detail/BS2026008008",
+"image": "https://pokemoncard.co.kr/public-assets/home/data/cards.image_www/data/wmimages/MEGA/MEZ/MEZ_008.webp",
+"set": "MEZ",
+"number": "008",
+"total": "019",
+"name": "모르페코",
+"hp": 80
+},
 "BS2026008009": {
 "kind": 1,
 "url": "https://pokemoncard.co.kr/cards/detail/BS2026008009",
